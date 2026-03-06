@@ -26,9 +26,9 @@
 ### Per-Variable Overrides
 
 - [x] **OVERRIDE-01**: A variable can specify `origin:` to override the active environment's origin (e.g., load from gcp while active env is local)
-- [ ] **OVERRIDE-02**: A variable can specify `dotenv_path:` to override the active environment's .env path when origin is local
+- [x] **OVERRIDE-02**: A variable can specify `dotenv_path:` to override the active environment's .env path when origin is local
 - [x] **OVERRIDE-03**: A variable can specify `environment:` to pin it to a specific named environment (uses that env's origin and dotenv_path)
-- [ ] **OVERRIDE-04**: A variable can combine `origin:` and `dotenv_path:` to fully override source independently of any environment
+- [x] **OVERRIDE-04**: A variable can combine `origin:` and `dotenv_path:` to fully override source independently of any environment
 
 ## v2 Requirements
 
@@ -65,9 +65,9 @@
 | RESOLVE-02 | Phase 2 | Complete |
 | RESOLVE-03 | Phase 2 | Complete |
 | OVERRIDE-01 | Phase 3 | Complete |
-| OVERRIDE-02 | Phase 3 | Pending |
+| OVERRIDE-02 | Phase 3 | Complete |
 | OVERRIDE-03 | Phase 3 | Complete |
-| OVERRIDE-04 | Phase 3 | Pending |
+| OVERRIDE-04 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 13 total
