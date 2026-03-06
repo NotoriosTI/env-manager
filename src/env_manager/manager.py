@@ -43,6 +43,7 @@ class ConfigManager:
         debug: bool = False,
     ) -> None:
         self._config_path = Path(config_path).expanduser().resolve()
+        self._project_root = self._discover_project_root()
         self._raw_config = load_yaml(str(self._config_path))
         self._variables = self._extract_variables()
         self._validation = self._extract_validation()
@@ -50,7 +51,7 @@ class ConfigManager:
         # Parse environments and select active one BEFORE resolving origin/dotenv/gcp
         self._environments = parse_environments(
             self._raw_config,
-            project_root=str(self._config_path.parent),
+            project_root=str(self._project_root),
         )
         self._active_environment = self._select_environment()
 
@@ -74,18 +75,29 @@ class ConfigManager:
     def _resolve_dotenv_path(self, provided: Optional[str]) -> Optional[str]:
         if provided:
             self._has_explicit_dotenv_contract = True
-            candidate = Path(provided).expanduser()
-            return str(candidate.resolve())
+            return self._resolve_project_path(provided)
         # Check active environment config before standard discovery
         if self._active_environment and self._active_environment.dotenv_path:
             self._has_explicit_dotenv_contract = True
-            env_dotenv = Path(self._config_path.parent) / self._active_environment.dotenv_path
-            return str(env_dotenv.resolve())
+            return self._resolve_project_path(self._active_environment.dotenv_path)
         discovered = find_dotenv(usecwd=True)
         if discovered:
             return discovered
-        fallback = self._config_path.parent / ".env"
+        fallback = self._project_root / ".env"
         return str(fallback) if fallback.exists() else None
+
+    def _discover_project_root(self) -> Path:
+        current = self._config_path.parent
+        for candidate in (current, *current.parents):
+            if (candidate / "pyproject.toml").exists():
+                return candidate
+        return self._config_path.parent
+
+    def _resolve_project_path(self, raw_path: str) -> str:
+        candidate = Path(raw_path).expanduser()
+        if candidate.is_absolute():
+            return str(candidate.resolve())
+        return str((self._project_root / candidate).resolve())
 
     def _read_dotenv_values(self) -> dict[str, str]:
         if not self._dotenv_path:
@@ -234,8 +246,7 @@ class ConfigManager:
     ) -> Optional[str]:
         if not environment.dotenv_path:
             return None
-        env_dotenv = Path(self._config_path.parent) / environment.dotenv_path
-        return str(env_dotenv.resolve())
+        return self._resolve_project_path(environment.dotenv_path)
 
     def _environment_source_context(self, environment: EnvironmentConfig) -> SourceContext:
         return SourceContext(
@@ -266,6 +277,19 @@ class ConfigManager:
                 environment_name=context.environment_name,
                 origin=origin,
                 dotenv_path=dotenv_path,
+                gcp_project_id=context.gcp_project_id,
+            )
+
+        dotenv_override = definition.get("dotenv_path")
+        if dotenv_override is not None:
+            if not isinstance(dotenv_override, str) or not dotenv_override.strip():
+                raise ValueError(
+                    f"Variable '{var_name}': 'dotenv_path' must be a non-empty string."
+                )
+            context = SourceContext(
+                environment_name=context.environment_name,
+                origin=context.origin,
+                dotenv_path=self._resolve_project_path(dotenv_override),
                 gcp_project_id=context.gcp_project_id,
             )
 
@@ -317,9 +341,10 @@ class ConfigManager:
                 )
             except FileNotFoundError as exc:
                 missing_path = Path(str(exc)).expanduser().resolve()
+                missing_variables = ", ".join(grouped_names)
                 raise RuntimeError(
-                    "Active %s requires local .env file '%s' for sourced lookups."
-                    % (self._format_environment_label(context), missing_path)
+                    "Variable(s) %s in %s require local .env file '%s' for sourced lookups."
+                    % (missing_variables, self._format_environment_label(context), missing_path)
                 ) from exc
 
         required = set(self._validation.get("required", []) or [])
@@ -434,6 +459,13 @@ class ConfigManager:
                 raise ValueError(
                     f"Variable '{name}' has invalid origin '{origin_override}'; "
                     f"expected one of {sorted(_VALID_ORIGINS)}"
+                )
+
+        dotenv_path_override = definition.get("dotenv_path")
+        if dotenv_path_override is not None:
+            if not isinstance(dotenv_path_override, str) or not dotenv_path_override.strip():
+                raise ValueError(
+                    f"Variable '{name}': 'dotenv_path' must be a non-empty string."
                 )
         
         v_type = str(definition.get("type", "str"))
