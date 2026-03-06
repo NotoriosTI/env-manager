@@ -24,6 +24,13 @@ def _write_config(tmp_path: Path, yaml_text: str) -> Path:
     return config_path
 
 
+def _write_repo_config(repo_root: Path, yaml_text: str) -> Path:
+    (repo_root / "pyproject.toml").write_text("[project]\nname='test-app'\n", encoding="utf-8")
+    config_dir = repo_root / "config"
+    config_dir.mkdir()
+    return _write_config(config_dir, yaml_text)
+
+
 def test_required_sourced_variable_missing_raises_runtime_error_with_context(
     tmp_path, capsys
 ):
@@ -207,3 +214,71 @@ def test_gcp_runtime_context_is_included_in_missing_value_messages(
     output = capsys.readouterr().out
     assert "environment 'default'" in output
     assert "GCP project 'app-prod'" in output
+
+
+def test_missing_explicit_per_variable_dotenv_raises_only_when_lookup_needs_file(
+    tmp_path, monkeypatch
+):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.delenv("API_KEY", raising=False)
+
+    config_path = _write_repo_config(
+        repo_root,
+        """
+        environments:
+          staging:
+            origin: local
+            dotenv_path: env/.env.staging
+        variables:
+          API_KEY:
+            source: API_KEY
+            dotenv_path: secrets/.env.missing
+        validation:
+          required:
+            - API_KEY
+        """,
+    )
+    (repo_root / "env").mkdir()
+    (repo_root / "env" / ".env.staging").write_text("API_KEY=from-staging\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError) as exc:
+        ConfigManager(str(config_path), auto_load=True)
+
+    message = str(exc.value)
+    assert "API_KEY" in message
+    assert "environment 'staging'" in message
+    assert str((repo_root / "secrets" / ".env.missing").resolve()) in message
+
+
+def test_missing_explicit_per_variable_dotenv_is_bypassed_by_os_environ(
+    tmp_path, monkeypatch
+):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("API_KEY", "from-os")
+
+    config_path = _write_repo_config(
+        repo_root,
+        """
+        environments:
+          staging:
+            origin: local
+            dotenv_path: env/.env.staging
+        variables:
+          API_KEY:
+            source: API_KEY
+            dotenv_path: secrets/.env.missing
+        validation:
+          required:
+            - API_KEY
+        """,
+    )
+    (repo_root / "env").mkdir()
+    (repo_root / "env" / ".env.staging").write_text("API_KEY=from-staging\n", encoding="utf-8")
+
+    manager = ConfigManager(str(config_path), auto_load=True)
+
+    assert manager.get("API_KEY") == "from-os"

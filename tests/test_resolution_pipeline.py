@@ -15,6 +15,13 @@ def _write_config(tmp_path: Path, yaml_text: str) -> Path:
     return config_path
 
 
+def _write_repo_config(repo_root: Path, yaml_text: str) -> Path:
+    (repo_root / "pyproject.toml").write_text("[project]\nname='test-app'\n", encoding="utf-8")
+    config_dir = repo_root / "config"
+    config_dir.mkdir()
+    return _write_config(config_dir, yaml_text)
+
+
 def test_sourced_value_prefers_os_environ_over_active_environment_dotenv(
     tmp_path, monkeypatch
 ):
@@ -221,3 +228,104 @@ def test_variables_without_overrides_keep_active_environment_behavior(
 
     assert manager.get("SHARED_TOKEN") == "from-staging"
     assert manager.get("OVERRIDDEN_TOKEN") == "from-production"
+
+
+def test_variable_dotenv_path_override_uses_project_root_relative_path(
+    tmp_path, monkeypatch
+):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.delenv("API_KEY", raising=False)
+
+    config_path = _write_repo_config(
+        repo_root,
+        """
+        environments:
+          staging:
+            origin: local
+            dotenv_path: env/.env.staging
+        variables:
+          API_KEY:
+            source: API_KEY
+            dotenv_path: secrets/.env.override
+        validation:
+          strict: false
+        """,
+    )
+    (repo_root / "env").mkdir()
+    (repo_root / "env" / ".env.staging").write_text("API_KEY=from-staging\n", encoding="utf-8")
+    (repo_root / "secrets").mkdir()
+    (repo_root / "secrets" / ".env.override").write_text(
+        "API_KEY=from-override\n", encoding="utf-8"
+    )
+
+    manager = ConfigManager(str(config_path), auto_load=True)
+
+    assert manager.get("API_KEY") == "from-override"
+
+
+def test_pinned_environment_without_other_overrides_uses_environment_defaults(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.delenv("API_KEY", raising=False)
+
+    config_path = _write_config(
+        tmp_path,
+        """
+        environments:
+          staging:
+            origin: local
+            dotenv_path: .env.staging
+          production:
+            origin: local
+            dotenv_path: .env.production
+        variables:
+          API_KEY:
+            source: API_KEY
+            environment: production
+        validation:
+          strict: false
+        """,
+    )
+    (tmp_path / ".env.staging").write_text("API_KEY=from-staging\n", encoding="utf-8")
+    (tmp_path / ".env.production").write_text("API_KEY=from-production\n", encoding="utf-8")
+
+    manager = ConfigManager(str(config_path), auto_load=True)
+
+    assert manager.get("API_KEY") == "from-production"
+
+
+def test_origin_local_with_dotenv_path_is_independent_of_active_environment(
+    tmp_path, monkeypatch
+):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.delenv("LOCAL_ONLY_TOKEN", raising=False)
+
+    config_path = _write_repo_config(
+        repo_root,
+        """
+        environments:
+          prod:
+            origin: gcp
+            gcp_project_id: app-prod
+        variables:
+          LOCAL_ONLY_TOKEN:
+            source: LOCAL_ONLY_TOKEN
+            origin: local
+            dotenv_path: secrets/.env.special
+        validation:
+          strict: false
+        """,
+    )
+    (repo_root / "secrets").mkdir()
+    (repo_root / "secrets" / ".env.special").write_text(
+        "LOCAL_ONLY_TOKEN=from-special\n", encoding="utf-8"
+    )
+
+    manager = ConfigManager(str(config_path), auto_load=True)
+
+    assert manager.get("LOCAL_ONLY_TOKEN") == "from-special"
