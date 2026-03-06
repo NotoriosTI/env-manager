@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -13,6 +14,18 @@ from env_manager.factory import create_loader
 from env_manager.utils import coerce_type, load_yaml, logger, mask_secret
 
 from .base import SecretLoader
+
+_VALID_ORIGINS = {"local", "gcp"}
+
+
+@dataclass(frozen=True)
+class SourceContext:
+    """Effective source settings for one variable lookup."""
+
+    environment_name: str
+    origin: str
+    dotenv_path: Optional[str]
+    gcp_project_id: Optional[str]
 
 
 class ConfigManager:
@@ -51,6 +64,7 @@ class ConfigManager:
         self.strict = self._resolve_strict(strict)
 
         self._loader: Optional[SecretLoader] = None
+        self._loaders: dict[tuple[str, Optional[str], Optional[str]], SecretLoader] = {}
         self._values: dict[str, Any] = {}
         self._loaded = False
 
@@ -190,12 +204,72 @@ class ConfigManager:
 
     def _ensure_loader(self) -> SecretLoader:
         if self._loader is None:
-            self._loader = create_loader(
-                self.secret_origin,
-                gcp_project_id=self.gcp_project_id,
-                dotenv_path=self._dotenv_path,
-            )
+            self._loader = self._get_loader_for_context(self._default_source_context())
         return self._loader
+
+    def _get_loader_for_context(self, context: SourceContext) -> SecretLoader:
+        cache_key = (context.origin, context.gcp_project_id, context.dotenv_path)
+        loader = self._loaders.get(cache_key)
+        if loader is None:
+            loader = create_loader(
+                context.origin,
+                gcp_project_id=context.gcp_project_id,
+                dotenv_path=context.dotenv_path,
+            )
+            self._loaders[cache_key] = loader
+        return loader
+
+    def _default_source_context(self) -> SourceContext:
+        return SourceContext(
+            environment_name=(
+                self._active_environment.name if self._active_environment else "default"
+            ),
+            origin=self.secret_origin,
+            dotenv_path=self._dotenv_path,
+            gcp_project_id=self.gcp_project_id,
+        )
+
+    def _resolve_environment_dotenv_path(
+        self, environment: EnvironmentConfig
+    ) -> Optional[str]:
+        if not environment.dotenv_path:
+            return None
+        env_dotenv = Path(self._config_path.parent) / environment.dotenv_path
+        return str(env_dotenv.resolve())
+
+    def _environment_source_context(self, environment: EnvironmentConfig) -> SourceContext:
+        return SourceContext(
+            environment_name=environment.name,
+            origin=environment.origin,
+            dotenv_path=self._resolve_environment_dotenv_path(environment),
+            gcp_project_id=environment.gcp_project_id,
+        )
+
+    def _effective_source_context(
+        self, var_name: str, definition: dict[str, Any]
+    ) -> SourceContext:
+        environment_name = definition.get("environment")
+        origin_override = definition.get("origin")
+
+        context = self._default_source_context()
+        if environment_name:
+            context = self._environment_source_context(self._environments[environment_name])
+
+        if origin_override:
+            origin = str(origin_override).strip().lower()
+            dotenv_path = context.dotenv_path
+            if origin == "gcp":
+                dotenv_path = None
+            elif dotenv_path is None:
+                dotenv_path = self._dotenv_path
+            context = SourceContext(
+                environment_name=context.environment_name,
+                origin=origin,
+                dotenv_path=dotenv_path,
+                gcp_project_id=context.gcp_project_id,
+            )
+
+        return context
 
     def load(self) -> None:
         """Load variables according to the YAML configuration."""
@@ -204,6 +278,7 @@ class ConfigManager:
             return
 
         sources = {}
+        contexts: dict[str, SourceContext] = {}
         default_only_variables: list[str] = []
         sourced_variables: list[str] = []
         for name, definition in self._variables.items():
@@ -213,17 +288,38 @@ class ConfigManager:
                 default_only_variables.append(name)
             else:
                 sourced_variables.append(name)
+                contexts[name] = self._effective_source_context(name, definition)
 
         fetched: dict[str, Optional[str]] = {}
-        if sourced_variables:
-            loader = self._ensure_loader()
+        variables_needing_lookup: dict[
+            tuple[str, Optional[str], Optional[str], str], list[str]
+        ] = {}
+        for name in sourced_variables:
+            if name in os.environ:
+                fetched[sources[name]] = os.environ[name]
+                continue
+            context = contexts[name]
+            group_key = (
+                context.origin,
+                context.gcp_project_id,
+                context.dotenv_path,
+                context.environment_name,
+            )
+            variables_needing_lookup.setdefault(group_key, []).append(name)
+
+        for grouped_names in variables_needing_lookup.values():
+            sample_name = grouped_names[0]
+            context = contexts[sample_name]
+            loader = self._get_loader_for_context(context)
             try:
-                fetched = loader.get_many([sources[name] for name in sourced_variables])
+                fetched.update(
+                    loader.get_many([sources[name] for name in grouped_names])
+                )
             except FileNotFoundError as exc:
                 missing_path = Path(str(exc)).expanduser().resolve()
                 raise RuntimeError(
                     "Active %s requires local .env file '%s' for sourced lookups."
-                    % (self._format_environment_label(), missing_path)
+                    % (self._format_environment_label(context), missing_path)
                 ) from exc
 
         required = set(self._validation.get("required", []) or [])
@@ -245,23 +341,31 @@ class ConfigManager:
 
             if raw_value is None:
                 if self.strict:
-                    message = self._format_strict_missing_message(var_name, source)
+                    message = self._format_strict_missing_message(
+                        var_name, source, contexts[var_name]
+                    )
                     logger.error(message)
                     raise RuntimeError(message)
                 if has_default:
                     if var_name in required:
                         logger.warning(
-                            self._format_default_fallback_warning(var_name, source)
+                            self._format_default_fallback_warning(
+                                var_name, source, contexts[var_name]
+                            )
                         )
                     raw_value = default_value
                 else:
                     if var_name in required:
-                        message = self._format_required_missing_message(var_name, source)
+                        message = self._format_required_missing_message(
+                            var_name, source, contexts[var_name]
+                        )
                         logger.error(message)
                         raise RuntimeError(message)
                     if var_name in optional:
                         logger.warning(
-                            self._format_optional_missing_warning(var_name, source)
+                            self._format_optional_missing_warning(
+                                var_name, source, contexts[var_name]
+                            )
                         )
                     self._values[var_name] = None
                     continue
@@ -305,6 +409,32 @@ class ConfigManager:
             raise ValueError(
                 f"Variable '{name}': 'source' must be a string if provided."
             )
+
+        environment_name = definition.get("environment")
+        if environment_name is not None:
+            if not isinstance(environment_name, str) or not environment_name.strip():
+                raise ValueError(
+                    f"Variable '{name}': 'environment' must be a non-empty string."
+                )
+            if environment_name not in self._environments:
+                available = sorted(self._environments.keys())
+                raise ValueError(
+                    f"Variable '{name}' references undefined environment "
+                    f"'{environment_name}'. Available environments: {available}"
+                )
+
+        origin_override = definition.get("origin")
+        if origin_override is not None:
+            if not isinstance(origin_override, str) or not origin_override.strip():
+                raise ValueError(
+                    f"Variable '{name}': 'origin' must be a non-empty string."
+                )
+            normalized_origin = origin_override.strip().lower()
+            if normalized_origin not in _VALID_ORIGINS:
+                raise ValueError(
+                    f"Variable '{name}' has invalid origin '{origin_override}'; "
+                    f"expected one of {sorted(_VALID_ORIGINS)}"
+                )
         
         v_type = str(definition.get("type", "str"))
         if v_type not in {"str", "int", "float", "bool"}:
@@ -313,46 +443,63 @@ class ConfigManager:
             )
         return source
 
-    def _format_environment_label(self) -> str:
+    def _format_environment_label(
+        self, context: Optional[SourceContext] = None
+    ) -> str:
         environment_name = (
-            self._active_environment.name if self._active_environment else "default"
+            context.environment_name
+            if context is not None
+            else (
+                self._active_environment.name if self._active_environment else "default"
+            )
         )
         return f"environment '{environment_name}'"
 
-    def _format_runtime_context(self) -> str:
-        if self.secret_origin == "gcp":
-            project_id = self.gcp_project_id or "unknown-project"
+    def _format_runtime_context(self, context: Optional[SourceContext] = None) -> str:
+        effective_context = context or self._default_source_context()
+        if effective_context.origin == "gcp":
+            project_id = effective_context.gcp_project_id or "unknown-project"
             return (
-                f"{self._format_environment_label()} using GCP project '{project_id}'"
+                f"{self._format_environment_label(effective_context)} "
+                f"using GCP project '{project_id}'"
             )
 
-        dotenv_path = self._dotenv_path or "<no dotenv file>"
+        dotenv_path = effective_context.dotenv_path or "<no dotenv file>"
         return (
-            f"{self._format_environment_label()} using local .env '{dotenv_path}'"
+            f"{self._format_environment_label(effective_context)} "
+            f"using local .env '{dotenv_path}'"
         )
 
-    def _format_required_missing_message(self, var_name: str, source: str) -> str:
+    def _format_required_missing_message(
+        self, var_name: str, source: str, context: Optional[SourceContext] = None
+    ) -> str:
         return (
             f"Required variable '{var_name}' not found in source '{source}' for "
-            f"{self._format_runtime_context()}."
+            f"{self._format_runtime_context(context)}."
         )
 
-    def _format_default_fallback_warning(self, var_name: str, source: str) -> str:
+    def _format_default_fallback_warning(
+        self, var_name: str, source: str, context: Optional[SourceContext] = None
+    ) -> str:
         return (
             f"Required variable '{var_name}' missing from source; using YAML default "
-            f"for source '{source}' in {self._format_runtime_context()}."
+            f"for source '{source}' in {self._format_runtime_context(context)}."
         )
 
-    def _format_optional_missing_warning(self, var_name: str, source: str) -> str:
+    def _format_optional_missing_warning(
+        self, var_name: str, source: str, context: Optional[SourceContext] = None
+    ) -> str:
         return (
             f"Optional variable '{var_name}' resolved to None because source "
-            f"'{source}' was unavailable in {self._format_runtime_context()}."
+            f"'{source}' was unavailable in {self._format_runtime_context(context)}."
         )
 
-    def _format_strict_missing_message(self, var_name: str, source: str) -> str:
+    def _format_strict_missing_message(
+        self, var_name: str, source: str, context: Optional[SourceContext] = None
+    ) -> str:
         return (
             f"Strict mode: variable '{var_name}' is missing from source '{source}' in "
-            f"{self._format_runtime_context()}."
+            f"{self._format_runtime_context(context)}."
         )
 
     def get(self, key: str, default: Any = None) -> Any:
