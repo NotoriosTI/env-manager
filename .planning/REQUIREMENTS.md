@@ -8,14 +8,14 @@
 ### Environment Configuration
 
 - [x] **ENV-01**: YAML config supports an `environments:` section defining named environments with `origin`, `dotenv_path`, and `gcp_project_id` per environment
-- [ ] **ENV-02**: Active environment is selected via `ENVIRONMENT` env var, falling back to `default` if not set
+- [x] **ENV-02**: Active environment is selected via `ENVIRONMENT` env var, falling back to `default` if not set
 - [x] **ENV-03**: Each environment config determines which loader (local/gcp) and which .env file path to use
 - [x] **ENV-04**: `dotenv_path` in environment config accepts a full path or a filename resolved relative to project root
 
 ### Backwards Compatibility
 
-- [ ] **COMPAT-01**: Old YAML format without `environments:` section continues to work by auto-creating a `default` environment from existing settings
-- [ ] **COMPAT-02**: `init_config()` and `get_config()` / `require_config()` signatures remain compatible with existing consumers
+- [x] **COMPAT-01**: Old YAML format without `environments:` section continues to work by auto-creating a `default` environment from existing settings
+- [x] **COMPAT-02**: `init_config()` and `get_config()` / `require_config()` signatures remain compatible with existing consumers
 
 ### Variable Resolution
 
@@ -56,11 +56,11 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ENV-01 | Phase 1 | Complete |
-| ENV-02 | Phase 1 | Pending |
+| ENV-02 | Phase 1 | Complete |
 | ENV-03 | Phase 1 | Complete |
 | ENV-04 | Phase 1 | Complete |
-| COMPAT-01 | Phase 1 | Pending |
-| COMPAT-02 | Phase 1 | Pending |
+| COMPAT-01 | Phase 1 | Complete |
+| COMPAT-02 | Phase 1 | Complete |
 | RESOLVE-01 | Phase 2 | Pending |
 | RESOLVE-02 | Phase 2 | Pending |
 | RESOLVE-03 | Phase 2 | Pending |

@@ -12,7 +12,7 @@ Transform env-manager from a flat config loader into an environment-aware config
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Environment Schema** - Named environments in YAML with backwards-compatible parsing
+- [x] **Phase 1: Environment Schema** - Named environments in YAML with backwards-compatible parsing (completed 2026-03-06)
 - [ ] **Phase 2: Resolution Pipeline** - Environment-aware variable resolution with correct precedence
 - [ ] **Phase 3: Per-Variable Overrides** - Variable-level origin, dotenv_path, and environment pinning
 
@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Setting `ENVIRONMENT=staging` selects the `staging` environment; omitting it falls back to `default`
   3. An existing YAML config without `environments:` continues to load and behave identically to current behavior
   4. `init_config()`, `get_config()`, and `require_config()` work with both old and new YAML formats without signature changes
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — EnvironmentConfig dataclass and parse_environments parser with validation
@@ -68,6 +68,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Environment Schema | 1/2 | In progress | - |
+| 1. Environment Schema | 2/2 | Complete   | 2026-03-06 |
 | 2. Resolution Pipeline | 0/? | Not started | - |
 | 3. Per-Variable Overrides | 0/? | Not started | - |
