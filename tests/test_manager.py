@@ -155,3 +155,60 @@ def test_debug_parameter_disables_masking(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "Loaded DB_PASSWORD: password123" in output
+
+
+def test_missing_active_environment_dotenv_is_deferred_until_lookup_needed(
+    tmp_path, capsys
+):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+variables:
+  DB_PASSWORD:
+    source: DB_PASSWORD
+environments:
+  default:
+    origin: local
+    dotenv_path: .env.missing
+validation:
+  required:
+    - DB_PASSWORD
+        """.strip(),
+        encoding="utf-8",
+    )
+    os.environ["DB_PASSWORD"] = "from-env"
+
+    manager = ConfigManager(str(config_path), auto_load=True)
+
+    assert manager.get("DB_PASSWORD") == "from-env"
+    output = capsys.readouterr().out
+    assert str((tmp_path / ".env.missing").resolve()) not in output
+
+
+def test_missing_active_environment_dotenv_raises_with_absolute_path_when_needed(
+    tmp_path,
+):
+    config_path = tmp_path / "config.yaml"
+    missing_path = (tmp_path / ".env.missing").resolve()
+    config_path.write_text(
+        """
+variables:
+  DB_PASSWORD:
+    source: DB_PASSWORD
+environments:
+  default:
+    origin: local
+    dotenv_path: .env.missing
+validation:
+  required:
+    - DB_PASSWORD
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        ConfigManager(str(config_path), auto_load=True)
+
+    message = str(exc.value)
+    assert "environment 'default'" in message
+    assert str(missing_path) in message
