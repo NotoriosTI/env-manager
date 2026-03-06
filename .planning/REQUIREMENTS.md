@@ -21,7 +21,7 @@
 
 - [x] **RESOLVE-01**: Variable value resolution order is: os.environ > .env file (from active environment config) > YAML default
 - [x] **RESOLVE-02**: Variables with only a `default` and no `source` skip the loader entirely with no warnings
-- [ ] **RESOLVE-03**: Variables with a `source` that aren't found follow existing required/optional/strict validation rules
+- [x] **RESOLVE-03**: Variables with a `source` that aren't found follow existing required/optional/strict validation rules
 
 ### Per-Variable Overrides
 
@@ -63,7 +63,7 @@
 | COMPAT-02 | Phase 1 | Complete |
 | RESOLVE-01 | Phase 2 | Complete |
 | RESOLVE-02 | Phase 2 | Complete |
-| RESOLVE-03 | Phase 2 | Pending |
+| RESOLVE-03 | Phase 2 | Complete |
 | OVERRIDE-01 | Phase 3 | Pending |
 | OVERRIDE-02 | Phase 3 | Pending |
 | OVERRIDE-03 | Phase 3 | Pending |
@@ -76,4 +76,4 @@
 
 ---
 *Requirements defined: 2026-03-06*
-*Last updated: 2026-03-06 after roadmap creation*
+*Last updated: 2026-03-06 after completing Phase 2*

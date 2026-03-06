@@ -13,7 +13,7 @@ Transform env-manager from a flat config loader into an environment-aware config
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Environment Schema** - Named environments in YAML with backwards-compatible parsing (completed 2026-03-06)
-- [ ] **Phase 2: Resolution Pipeline** - Environment-aware variable resolution with correct precedence
+- [x] **Phase 2: Resolution Pipeline** - Environment-aware variable resolution with correct precedence (completed 2026-03-06)
 - [ ] **Phase 3: Per-Variable Overrides** - Variable-level origin, dotenv_path, and environment pinning
 
 ## Phase Details
@@ -42,11 +42,11 @@ Plans:
   2. A variable absent from os.environ but present in the active environment's .env file takes the .env value
   3. A variable with only a YAML `default` and no `source` resolves to the default without triggering a loader or producing warnings
   4. A required variable missing from all sources raises a validation error; an optional variable missing resolves to None or its default
-**Plans**: 1/2 plans complete
+**Plans**: 2/2 plans complete
 
 Plans:
 - [x] 02-01-PLAN.md — Core sourced precedence and default-only variable bypass
-- [ ] 02-02-PLAN.md — Missing-source diagnostics and explicit active-environment `.env` contract
+- [x] 02-02-PLAN.md — Missing-source diagnostics and explicit active-environment `.env` contract
 
 ### Phase 3: Per-Variable Overrides
 **Goal**: Individual variables can override their source independently of the active environment
@@ -70,5 +70,5 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Environment Schema | 2/2 | Complete   | 2026-03-06 |
-| 2. Resolution Pipeline | 1/2 | In Progress | - |
+| 2. Resolution Pipeline | 2/2 | Complete | 2026-03-06 |
 | 3. Per-Variable Overrides | 0/? | Not started | - |
