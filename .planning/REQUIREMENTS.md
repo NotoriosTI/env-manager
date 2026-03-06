@@ -19,8 +19,8 @@
 
 ### Variable Resolution
 
-- [ ] **RESOLVE-01**: Variable value resolution order is: os.environ > .env file (from active environment config) > YAML default
-- [ ] **RESOLVE-02**: Variables with only a `default` and no `source` skip the loader entirely with no warnings
+- [x] **RESOLVE-01**: Variable value resolution order is: os.environ > .env file (from active environment config) > YAML default
+- [x] **RESOLVE-02**: Variables with only a `default` and no `source` skip the loader entirely with no warnings
 - [ ] **RESOLVE-03**: Variables with a `source` that aren't found follow existing required/optional/strict validation rules
 
 ### Per-Variable Overrides
@@ -61,8 +61,8 @@
 | ENV-04 | Phase 1 | Complete |
 | COMPAT-01 | Phase 1 | Complete |
 | COMPAT-02 | Phase 1 | Complete |
-| RESOLVE-01 | Phase 2 | Pending |
-| RESOLVE-02 | Phase 2 | Pending |
+| RESOLVE-01 | Phase 2 | Complete |
+| RESOLVE-02 | Phase 2 | Complete |
 | RESOLVE-03 | Phase 2 | Pending |
 | OVERRIDE-01 | Phase 3 | Pending |
 | OVERRIDE-02 | Phase 3 | Pending |

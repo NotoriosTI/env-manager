@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md — EnvironmentConfig dataclass and parse_environments parser with validation
-- [ ] 01-02-PLAN.md — Wire environment selection into ConfigManager with backwards compatibility
+- [x] 01-02-PLAN.md — Wire environment selection into ConfigManager with backwards compatibility
 
 ### Phase 2: Resolution Pipeline
 **Goal**: Variables resolve from the correct source based on the active environment's configuration
@@ -42,10 +42,11 @@ Plans:
   2. A variable absent from os.environ but present in the active environment's .env file takes the .env value
   3. A variable with only a YAML `default` and no `source` resolves to the default without triggering a loader or producing warnings
   4. A required variable missing from all sources raises a validation error; an optional variable missing resolves to None or its default
-**Plans**: TBD
+**Plans**: 1/2 plans complete
 
 Plans:
-- [ ] 02-01: TBD
+- [x] 02-01-PLAN.md — Core sourced precedence and default-only variable bypass
+- [ ] 02-02-PLAN.md — Missing-source diagnostics and explicit active-environment `.env` contract
 
 ### Phase 3: Per-Variable Overrides
 **Goal**: Individual variables can override their source independently of the active environment
@@ -69,5 +70,5 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Environment Schema | 2/2 | Complete   | 2026-03-06 |
-| 2. Resolution Pipeline | 0/? | Not started | - |
+| 2. Resolution Pipeline | 1/2 | In Progress | - |
 | 3. Per-Variable Overrides | 0/? | Not started | - |
