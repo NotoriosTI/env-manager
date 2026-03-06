@@ -128,6 +128,161 @@ class TestEnvironmentSelection:
 
         assert mgr.gcp_project_id == "my-prod-project"
 
+    def test_variable_environment_uses_pinned_environment_context(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("ENVIRONMENT", "staging")
+        monkeypatch.chdir(tmp_path)
+        config_path = _write_config(
+            tmp_path,
+            """
+            environments:
+              default:
+                origin: local
+                dotenv_path: .env
+              staging:
+                origin: local
+                dotenv_path: .env.staging
+              production:
+                origin: gcp
+                gcp_project_id: prod-project
+            variables:
+              SHARED_TOKEN:
+                source: shared/token
+              PROD_TOKEN:
+                source: prod/token
+                environment: production
+            """,
+        )
+
+        calls: list[tuple[str, str | None, str | None, tuple[str, ...]]] = []
+
+        class FakeLoader:
+            def __init__(self, values):
+                self._values = values
+
+            def get_many(self, keys):
+                requested = tuple(keys)
+                calls.append(requested)
+                return {key: self._values.get(key) for key in keys}
+
+        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+            context = (origin, gcp_project_id, dotenv_path)
+            if origin == "local":
+                assert dotenv_path == str((tmp_path / ".env.staging").resolve())
+                return FakeLoader({"shared/token": "staging-value"})
+            assert origin == "gcp"
+            assert gcp_project_id == "prod-project"
+            return FakeLoader({"prod/token": "prod-value"})
+
+        monkeypatch.setattr(manager_module, "create_loader", fake_create_loader)
+
+        manager = ConfigManager(str(config_path), auto_load=True)
+
+        assert manager.get("SHARED_TOKEN") == "staging-value"
+        assert manager.get("PROD_TOKEN") == "prod-value"
+        assert calls == [("shared/token",), ("prod/token",)]
+
+    def test_variable_origin_override_replaces_only_origin_on_pinned_environment(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("ENVIRONMENT", "staging")
+        monkeypatch.chdir(tmp_path)
+        config_path = _write_config(
+            tmp_path,
+            """
+            environments:
+              staging:
+                origin: local
+                dotenv_path: .env.staging
+              production:
+                origin: gcp
+                gcp_project_id: prod-project
+            variables:
+              PROD_LOCAL_TOKEN:
+                source: PROD_LOCAL_TOKEN
+                environment: production
+                origin: local
+            """,
+        )
+        (tmp_path / ".env.staging").write_text("PROD_LOCAL_TOKEN=wrong\n", encoding="utf-8")
+        prod_env = tmp_path / ".env.production"
+        prod_env.write_text("PROD_LOCAL_TOKEN=from-prod-local\n", encoding="utf-8")
+
+        observed: list[tuple[str, str | None, str | None]] = []
+        original_create_loader = manager_module.create_loader
+
+        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+            observed.append((origin, gcp_project_id, dotenv_path))
+            return original_create_loader(
+                origin,
+                gcp_project_id=gcp_project_id,
+                dotenv_path=dotenv_path,
+            )
+
+        monkeypatch.setattr(manager_module, "create_loader", fake_create_loader)
+
+        manager = ConfigManager(
+            str(config_path),
+            dotenv_path=str(prod_env),
+            auto_load=True,
+        )
+
+        assert manager.get("PROD_LOCAL_TOKEN") == "from-prod-local"
+        assert observed == [("local", "prod-project", str(prod_env.resolve()))]
+
+    def test_variable_override_validation_rejects_unknown_environment(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.setenv("API_TOKEN", "from-os")
+        config_path = _write_config(
+            tmp_path,
+            """
+            environments:
+              default:
+                origin: local
+                dotenv_path: .env
+              production:
+                origin: gcp
+                gcp_project_id: prod-project
+            variables:
+              API_TOKEN:
+                source: API_TOKEN
+                environment: typo
+            """,
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            ConfigManager(str(config_path), auto_load=True)
+
+        message = str(exc_info.value)
+        assert "Variable 'API_TOKEN'" in message
+        assert "typo" in message
+        assert "default" in message
+        assert "production" in message
+
+    def test_variable_override_validation_rejects_invalid_origin(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        config_path = _write_config(
+            tmp_path,
+            """
+            variables:
+              API_TOKEN:
+                source: API_TOKEN
+                origin: vault
+            """,
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            ConfigManager(str(config_path), auto_load=True)
+
+        assert "Variable 'API_TOKEN'" in str(exc_info.value)
+        assert "origin" in str(exc_info.value)
+        assert "vault" in str(exc_info.value)
+
 
 class TestNoDefaultEnvironment:
     """When ENVIRONMENT is unset and no default is defined."""
