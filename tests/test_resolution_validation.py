@@ -10,8 +10,10 @@ from env_manager import ConfigManager
 
 
 @pytest.fixture(autouse=True)
-def reset_singleton():
+def reset_singleton(monkeypatch):
     manager_module._SINGLETON = None
+    for key in ("API_KEY", "OPTIONAL_TOKEN", "API_TOKEN", "GCP_PROJECT_ID"):
+        monkeypatch.delenv(key, raising=False)
     yield
     manager_module._SINGLETON = None
 
@@ -40,6 +42,7 @@ def test_required_sourced_variable_missing_raises_runtime_error_with_context(
             - API_KEY
         """,
     )
+    (tmp_path / ".env.runtime").write_text("", encoding="utf-8")
 
     with pytest.raises(RuntimeError) as exc:
         ConfigManager(str(config_path), auto_load=True)
@@ -194,10 +197,13 @@ def test_gcp_runtime_context_is_included_in_missing_value_messages(
         lambda *args, **kwargs: FakeLoader(),
     )
 
-    manager = ConfigManager(str(config_path), auto_load=True)
+    manager = ConfigManager(
+        str(config_path),
+        gcp_project_id="app-prod",
+        auto_load=True,
+    )
 
     assert manager.get("API_TOKEN") is None
     output = capsys.readouterr().out
     assert "environment 'default'" in output
     assert "GCP project 'app-prod'" in output
-

@@ -12,8 +12,10 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 @pytest.fixture(autouse=True)
-def reset_singleton():
+def reset_singleton(monkeypatch):
     manager_module._SINGLETON = None  # type: ignore[attr-defined]
+    for key in ("DB_PASSWORD", "PORT", "DEBUG_MODE", "TIMEOUT", "GCP_PROJECT_ID"):
+        monkeypatch.delenv(key, raising=False)
     yield
     manager_module._SINGLETON = None  # type: ignore[attr-defined]
 
@@ -69,7 +71,7 @@ def test_missing_required_variable_raises(tmp_path):
     assert "Required variable 'DB_PASSWORD' not found" in str(exc.value)
 
 
-def test_optional_variable_warns(tmp_path, capsys):
+def test_optional_variable_with_default_is_quiet(tmp_path, capsys):
     config_path, env_path = _prepare_config(tmp_path)
     env_path.write_text("DB_PASSWORD=password123\n", encoding="utf-8")
 
@@ -80,7 +82,7 @@ def test_optional_variable_warns(tmp_path, capsys):
     )
 
     output = capsys.readouterr().out
-    assert "Optional variable DEBUG_MODE not found" in output
+    assert "Optional variable DEBUG_MODE" not in output
     assert manager.get("DEBUG_MODE") is False
 
 
@@ -95,7 +97,7 @@ def test_strict_mode_raises_on_missing(tmp_path):
             dotenv_path=str(env_path),
             strict=True,
         )
-    assert "Variable 'DB_PASSWORD' not found" in str(exc.value)
+    assert "Strict mode:" in str(exc.value)
 
 
 def test_singleton_api(tmp_path):
