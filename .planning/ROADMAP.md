@@ -57,10 +57,11 @@ Plans:
   2. A variable with `dotenv_path: .env.secrets` loads from that specific file instead of the environment's default .env path
   3. A variable with `environment: production` uses the `production` environment's origin and dotenv_path regardless of the active environment
   4. A variable combining `origin: local` and `dotenv_path: .env.special` loads from that file independent of any environment config
-**Plans**: TBD
+**Plans**: 1/2 plans complete
 
 Plans:
-- [ ] 03-01: TBD
+- [x] 03-01-PLAN.md — Per-variable environment and origin override context
+- [ ] 03-02-PLAN.md — Per-variable dotenv-path overrides and mixed-context execution
 
 ## Progress
 
@@ -71,4 +72,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. Environment Schema | 2/2 | Complete   | 2026-03-06 |
 | 2. Resolution Pipeline | 2/2 | Complete | 2026-03-06 |
-| 3. Per-Variable Overrides | 0/? | Not started | - |
+| 3. Per-Variable Overrides | 1/2 | In Progress | - |
