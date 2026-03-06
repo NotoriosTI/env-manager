@@ -120,6 +120,8 @@ class TestEnvironmentSelection:
         """Active environment's gcp_project_id is propagated."""
         monkeypatch.setenv("ENVIRONMENT", "production")
         monkeypatch.delenv("GCP_PROJECT_ID", raising=False)
+        # Change cwd so find_dotenv doesn't discover the project's real .env
+        monkeypatch.chdir(tmp_path)
         config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
 
         mgr = ConfigManager(str(config_path), auto_load=False)

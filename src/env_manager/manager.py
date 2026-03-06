@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from dotenv import dotenv_values, find_dotenv
 
+from env_manager.environment import EnvironmentConfig, parse_environments
 from env_manager.factory import create_loader
 from env_manager.utils import coerce_type, load_yaml, logger, mask_secret
 
@@ -32,6 +33,14 @@ class ConfigManager:
         self._raw_config = load_yaml(str(self._config_path))
         self._variables = self._extract_variables()
         self._validation = self._extract_validation()
+
+        # Parse environments and select active one BEFORE resolving origin/dotenv/gcp
+        self._environments = parse_environments(
+            self._raw_config,
+            project_root=str(self._config_path.parent),
+        )
+        self._active_environment = self._select_environment()
+
         self._dotenv_path = self._resolve_dotenv_path(dotenv_path)
         self._dotenv_values = self._read_dotenv_values()
         self._debug = debug
@@ -51,6 +60,10 @@ class ConfigManager:
         if provided:
             candidate = Path(provided).expanduser()
             return str(candidate.resolve()) if candidate.exists() else None
+        # Check active environment config before standard discovery
+        if self._active_environment and self._active_environment.dotenv_path:
+            env_dotenv = Path(self._config_path.parent) / self._active_environment.dotenv_path
+            return str(env_dotenv.resolve()) if env_dotenv.exists() else None
         discovered = find_dotenv(usecwd=True)
         if discovered:
             return discovered
@@ -68,21 +81,26 @@ class ConfigManager:
         # 1. Explicitly provided parameter
         # 2. Environment variable
         # 3. Value from .env file (read without loading entire file)
-        # 4. Default: "local"
+        # 4. Active environment config origin
+        # 5. Default: "local"
         if provided:
             return provided.strip().lower()
-        
+
         # Check os.environ first
         env_origin = os.environ.get("SECRET_ORIGIN")
         if env_origin:
             return env_origin.strip().lower()
-        
+
         # Check .env file without loading entire file to os.environ
         if self._dotenv_values:
             dotenv_origin = self._dotenv_values.get("SECRET_ORIGIN")
             if dotenv_origin:
                 return dotenv_origin.strip().lower()
-        
+
+        # Check active environment config
+        if self._active_environment:
+            return self._active_environment.origin
+
         return "local"
 
     def _resolve_gcp_project_id(self, provided: Optional[str]) -> Optional[str]:
@@ -90,7 +108,8 @@ class ConfigManager:
         # 1. Explicitly provided parameter
         # 2. Environment variable
         # 3. Value from .env file
-        # 4. Not set
+        # 4. Active environment config gcp_project_id
+        # 5. Not set
         candidate = (
             provided
             or os.environ.get("GCP_PROJECT_ID")
@@ -99,6 +118,13 @@ class ConfigManager:
         if candidate:
             os.environ.setdefault("GCP_PROJECT_ID", candidate)
             return candidate
+
+        # Check active environment config
+        if self._active_environment and self._active_environment.gcp_project_id:
+            gcp_id = self._active_environment.gcp_project_id
+            os.environ.setdefault("GCP_PROJECT_ID", gcp_id)
+            return gcp_id
+
         logger.warning("GCP_PROJECT_ID not set. Some features may not work.")
         return None
 
@@ -129,6 +155,33 @@ class ConfigManager:
                     f"Validation '{key}' entry must be a list if provided."
                 )
         return data
+
+    def _select_environment(self) -> Optional[EnvironmentConfig]:
+        """Select the active environment based on the ENVIRONMENT env var.
+
+        Returns None when no environments are defined or when ENVIRONMENT is
+        unset and there is no ``default`` environment (deferred error).
+        """
+        if not self._environments:
+            return None
+
+        env_name = os.environ.get("ENVIRONMENT")
+        if env_name is not None:
+            if env_name not in self._environments:
+                available = sorted(self._environments.keys())
+                raise ValueError(
+                    f"Environment '{env_name}' is not defined in the config. "
+                    f"Available environments: {available}"
+                )
+            return self._environments[env_name]
+
+        # ENVIRONMENT not set -- fall back to "default" if it exists
+        return self._environments.get("default")
+
+    @property
+    def active_environment(self) -> Optional[EnvironmentConfig]:
+        """Return the active environment configuration, if any."""
+        return self._active_environment
 
     def _ensure_loader(self) -> SecretLoader:
         if self._loader is None:
