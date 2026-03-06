@@ -198,40 +198,49 @@ class ConfigManager:
         if self._loaded:
             return
 
-        loader = self._ensure_loader()
+        sources = {}
+        default_only_variables: list[str] = []
+        sourced_variables: list[str] = []
+        for name, definition in self._variables.items():
+            source = self._validate_variable_definition(name, definition)
+            sources[name] = source
+            if source is None:
+                default_only_variables.append(name)
+            else:
+                sourced_variables.append(name)
 
-        sources = {
-            name: self._validate_variable_definition(name, definition)
-            for name, definition in self._variables.items()
-        }
-
-        # Only fetch from loader if there are sources with non-None values
-        sources_to_fetch = [s for s in sources.values() if s is not None]
-        fetched = loader.get_many(sources_to_fetch) if sources_to_fetch else {}
+        fetched: dict[str, Optional[str]] = {}
+        if sourced_variables:
+            loader = self._ensure_loader()
+            fetched = loader.get_many([sources[name] for name in sourced_variables])
 
         required = set(self._validation.get("required", []) or [])
         optional = set(self._validation.get("optional", []) or [])
 
-        for var_name, source in sources.items():
+        for var_name in default_only_variables:
             definition = self._variables[var_name]
+            target_type = str(definition.get("type", "str"))
+            raw_value = definition["default"]
+            self._store_loaded_value(var_name, raw_value, target_type)
+
+        for var_name in sourced_variables:
+            definition = self._variables[var_name]
+            source = sources[var_name]
             target_type = str(definition.get("type", "str"))
             has_default = "default" in definition
             default_value = definition.get("default") if has_default else None
-            raw_value = fetched.get(source) if source else None
-            missing_value = raw_value is None
+            raw_value = fetched.get(source)
 
-            if missing_value:
+            if raw_value is None:
                 message = (
                     f"Variable '{var_name}' not found in source '{source}' "
                     f"using origin '{self.secret_origin}'."
                 )
-                if self.strict and source is not None:
+                if self.strict:
                     logger.error(message)
                     raise RuntimeError(message)
                 if var_name in required and not has_default:
-                    logger.error(
-                        f"Required variable {var_name} not found"
-                    )
+                    logger.error(f"Required variable {var_name} not found")
                     origin_context = (
                         "GCP Secret Manager project '%s'"
                         % (self.gcp_project_id or "unknown-project")
@@ -243,10 +252,8 @@ class ConfigManager:
                         "Ensure the secret exists and the service has access."
                         % (var_name, origin_context)
                     )
-                if var_name in optional and source is not None:
-                    logger.warning(
-                        f"Optional variable {var_name} not found"
-                    )
+                if var_name in optional:
+                    logger.warning(f"Optional variable {var_name} not found")
 
                 if has_default:
                     raw_value = default_value
@@ -254,23 +261,22 @@ class ConfigManager:
                     self._values[var_name] = None
                     continue
 
-            try:
-                coerced_value = coerce_type(raw_value, target_type, var_name)
-            except ValueError as exc:
-                logger.error(
-                    f"Type coercion failed for {var_name}: {exc}"
-                )
-                raise
-            self._values[var_name] = coerced_value
-            os.environ[var_name] = str(coerced_value)
-            display_value = (
-                str(coerced_value)
-                if self._debug
-                else mask_secret(str(coerced_value))
-            )
-            logger.info(f"Loaded {var_name}: {display_value}")
+            self._store_loaded_value(var_name, raw_value, target_type)
 
         self._loaded = True
+
+    def _store_loaded_value(self, var_name: str, raw_value: Any, target_type: str) -> None:
+        try:
+            coerced_value = coerce_type(raw_value, target_type, var_name)
+        except ValueError as exc:
+            logger.error(f"Type coercion failed for {var_name}: {exc}")
+            raise
+        self._values[var_name] = coerced_value
+        os.environ[var_name] = str(coerced_value)
+        display_value = (
+            str(coerced_value) if self._debug else mask_secret(str(coerced_value))
+        )
+        logger.info(f"Loaded {var_name}: {display_value}")
 
     def _validate_variable_definition(
         self, name: str, definition: Any
