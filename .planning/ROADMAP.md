@@ -73,3 +73,27 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | 1. Environment Schema | 2/2 | Complete   | 2026-03-06 |
 | 2. Resolution Pipeline | 2/2 | Complete | 2026-03-06 |
 | 3. Per-Variable Overrides | 2/2 | Complete | 2026-03-06 |
+| 4. Comprehensive Testing | 1/1 | Complete | 2026-03-11 |
+| 5. Reduce and Consolidate | 3/3 | Complete | 2026-03-11 |
+
+### Phase 4: Comprehensive testing and validation suite
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 3
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 4 to break down)
+
+### Phase 5: Reduce and consolidate test suite
+
+**Goal:** Remove redundant tests and consolidate helpers to slim the test suite without losing coverage
+**Requirements**: TBD
+**Depends on:** Phase 4
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 05-01-PLAN.md — Slim test_validation.py: remove 2 redundant tests, replace local helper (completed 2026-03-11)
+- [x] 05-02-PLAN.md — Slim test_secret_origin_detection.py: keep 1 unique test, remove 3 redundant (completed 2026-03-11)
+- [x] 05-03-PLAN.md — Slim test_bool_to_string_coercion.py: collapse 5 to 3 tests, modernise fixtures (completed 2026-03-11)

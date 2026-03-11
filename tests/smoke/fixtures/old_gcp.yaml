@@ -1,0 +1,21 @@
+# Old format — no environments block.
+# Loader is selected at runtime via secret_origin="gcp".
+# Source keys are the GCP Secret Manager secret names.
+# Requires secrets named JUAN_DB_NAME, JUAN_DB_HOST, JUAN_DB_PORT,
+# JUAN_DB_USER, JUAN_DB_PASSWORD in SMOKE_GCP_PROJECT_ID.
+variables:
+  JUAN_DB_NAME:
+    source: JUAN_DB_NAME
+    type: str
+  JUAN_DB_HOST:
+    source: JUAN_DB_HOST
+    type: str
+  JUAN_DB_PORT:
+    source: JUAN_DB_PORT
+    type: int
+  JUAN_DB_USER:
+    source: JUAN_DB_USER
+    type: str
+  JUAN_DB_PASSWORD:
+    source: JUAN_DB_PASSWORD
+    type: str

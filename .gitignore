@@ -40,6 +40,7 @@ htmlcov/
 
 # Secrets (never commit!)
 .env
+.env.smoke
 config_vars.yaml
 *.pem
 *.key
@@ -47,3 +48,4 @@ config_vars.yaml
 # OS
 .DS_Store
 Thumbs.db
+.planning/
