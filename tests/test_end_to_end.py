@@ -36,7 +36,7 @@ def test_production_like_flow(prod_config: Path):
     required_keys = {
         "ODOO_PROD_URL",
         "OPENAI_API_KEY",
-        "JUAN_ANTHROPIC_API_KEY",
+        "ANTHROPIC_API_KEY",
         "SLACK_BOT_TOKEN",
     }
 
@@ -63,7 +63,7 @@ def test_production_like_flow(prod_config: Path):
     env_values = {
         "ODOO_PROD_URL": "https://odoo.local",
         "OPENAI_API_KEY": "sk-test-openai",
-        "JUAN_ANTHROPIC_API_KEY": "anthropic-test-key",
+        "ANTHROPIC_API_KEY": "anthropic-test-key",
         "SLACK_BOT_TOKEN": "xoxb-test-token",
     }
     env_file.write_text(

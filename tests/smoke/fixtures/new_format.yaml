@@ -2,8 +2,8 @@
 # Used by both new-format cases; ENVIRONMENT env var switches between them.
 #
 # Case 3: ENVIRONMENT=gcp   → GCPSecretLoader, project overridden by gcp_project_id param.
-#          Requires GCP secrets named JUAN_DB_NAME, JUAN_DB_HOST, JUAN_DB_PORT,
-#          JUAN_DB_USER, JUAN_DB_PASSWORD.
+#          Requires GCP secrets named APP_DB_NAME, APP_DB_HOST, APP_DB_PORT,
+#          APP_DB_USER, APP_DB_PASSWORD.
 # Case 4: ENVIRONMENT=local → DotEnvLoader reading .env in the same directory.
 #
 # gcp_project_id below is a placeholder; always overridden at runtime by the
@@ -18,18 +18,18 @@ environments:
     gcp_project_id: smoke-placeholder
 
 variables:
-  JUAN_DB_NAME:
-    source: JUAN_DB_NAME
+  APP_DB_NAME:
+    source: APP_DB_NAME
     type: str
-  JUAN_DB_HOST:
-    source: JUAN_DB_HOST
+  APP_DB_HOST:
+    source: APP_DB_HOST
     type: str
-  JUAN_DB_PORT:
-    source: JUAN_DB_PORT
+  APP_DB_PORT:
+    source: APP_DB_PORT
     type: int
-  JUAN_DB_USER:
-    source: JUAN_DB_USER
+  APP_DB_USER:
+    source: APP_DB_USER
     type: str
-  JUAN_DB_PASSWORD:
-    source: JUAN_DB_PASSWORD
+  APP_DB_PASSWORD:
+    source: APP_DB_PASSWORD
     type: str

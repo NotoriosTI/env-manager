@@ -2,8 +2,8 @@
 
 GCP cases use real credentials when .env.smoke is present at the project root:
     SMOKE_GCP_PROJECT_ID=your-project-id
-    (GCP Secret Manager must have secrets named JUAN_DB_NAME, JUAN_DB_HOST,
-     JUAN_DB_PORT, JUAN_DB_USER, JUAN_DB_PASSWORD)
+    (GCP Secret Manager must have secrets named APP_DB_NAME, APP_DB_HOST,
+     APP_DB_PORT, APP_DB_USER, APP_DB_PASSWORD)
 
 Without .env.smoke the GCP cases fall back to a mock loader (no network, no creds).
 All resolved values are always masked — real secrets are never printed.
@@ -60,7 +60,7 @@ GCP_PROJECT_ID: str = _smoke_cfg.get("SMOKE_GCP_PROJECT_ID", "mock-project")
 
 # Vars to scrub at case START so the case doesn't inherit caller shell state.
 _SCRUB_ON_ENTRY = (
-    "JUAN_DB_NAME", "JUAN_DB_HOST", "JUAN_DB_PORT", "JUAN_DB_USER", "JUAN_DB_PASSWORD",
+    "APP_DB_NAME", "APP_DB_HOST", "APP_DB_PORT", "APP_DB_USER", "APP_DB_PASSWORD",
     "GCP_PROJECT_ID", "SECRET_ORIGIN", "ENVIRONMENT",
 )
 
@@ -145,11 +145,11 @@ def _make_loader_spy(real_gcp: bool):
 
 class _MockGCPLoader:
     _SECRETS = {
-        "JUAN_DB_NAME":     "mock-juandb",
-        "JUAN_DB_HOST":     "127.0.0.1",
-        "JUAN_DB_PORT":     "5432",
-        "JUAN_DB_USER":     "mock-automation-admin",
-        "JUAN_DB_PASSWORD": "mock-wyshuq-vuncuv-3hitqU",
+        "APP_DB_NAME":     "mock-juandb",
+        "APP_DB_HOST":     "127.0.0.1",
+        "APP_DB_PORT":     "5432",
+        "APP_DB_USER":     "mock-automation-admin",
+        "APP_DB_PASSWORD": "mock-wyshuq-vuncuv-3hitqU",
     }
 
     def get_many(self, keys: list[str]) -> dict[str, str | None]:
@@ -163,14 +163,14 @@ class _MockGCPLoader:
 # The 4 cases
 # ---------------------------------------------------------------------------
 
-_VARS = ("JUAN_DB_NAME", "JUAN_DB_HOST", "JUAN_DB_PORT", "JUAN_DB_USER", "JUAN_DB_PASSWORD")
+_VARS = ("APP_DB_NAME", "APP_DB_HOST", "APP_DB_PORT", "APP_DB_USER", "APP_DB_PASSWORD")
 
 _DOTENV_CONTENT = (
-    "JUAN_DB_NAME=juandb\n"
-    "JUAN_DB_HOST=127.0.0.1\n"
-    "JUAN_DB_PORT=5432\n"
-    "JUAN_DB_USER=automation_admin\n"
-    "JUAN_DB_PASSWORD=wyshuq-vuncuv-3hitqU\n"
+    "APP_DB_NAME=juandb\n"
+    "APP_DB_HOST=127.0.0.1\n"
+    "APP_DB_PORT=5432\n"
+    "APP_DB_USER=automation_admin\n"
+    "APP_DB_PASSWORD=wyshuq-vuncuv-3hitqU\n"
 )
 
 
@@ -262,7 +262,7 @@ def _case_title(num: str, label: str, fmt: str, origin: str, uses_gcp: bool, fix
 def run_all() -> None:
     console.print(Rule("[bold white]env-manager smoke test[/bold white]"))
     gcp_line = (
-        Text(f"  GCP project: {GCP_PROJECT_ID}  (secrets: JUAN_DB_*)", style="bright_magenta")
+        Text(f"  GCP project: {GCP_PROJECT_ID}  (secrets: APP_DB_*)", style="bright_magenta")
         if REAL_GCP
         else Text("  GCP: .env.smoke not found — GCP cases use mock loader", style="dim yellow")
     )
