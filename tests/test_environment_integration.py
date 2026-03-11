@@ -301,6 +301,13 @@ class TestBackwardsCompatibility:
         - DB_PASSWORD
     """
 
+    YAML_OLD_FORMAT_WITH_DEFAULT = """\
+    variables:
+      DB_PASSWORD:
+        source: DB_PASSWORD
+        default: yaml-default
+    """
+
     def test_old_format_active_environment_is_none(self, tmp_path, monkeypatch):
         """Old format: active_environment is None."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
@@ -336,6 +343,146 @@ class TestBackwardsCompatibility:
         )
 
         assert mgr.get("DB_PASSWORD") == "secret123"
+
+    def test_old_format_resolution_precedence_os_environ_wins(
+        self, tmp_path, monkeypatch
+    ):
+        """Old format: os.environ beats both .env file and YAML default."""
+        monkeypatch.setenv("DB_PASSWORD", "from-os")
+        config_path = write_config(tmp_path, self.YAML_OLD_FORMAT_WITH_DEFAULT)
+        env_path = write_env(tmp_path, "DB_PASSWORD=from-dotenv\n")
+
+        manager = ConfigManager(
+            str(config_path), secret_origin="local", dotenv_path=str(env_path)
+        )
+
+        assert manager.get("DB_PASSWORD") == "from-os"
+
+    def test_old_format_resolution_precedence_dotenv_wins_over_default(
+        self, tmp_path, monkeypatch
+    ):
+        """Old format: .env file beats YAML default when os.environ not set."""
+        monkeypatch.delenv("DB_PASSWORD", raising=False)
+        config_path = write_config(tmp_path, self.YAML_OLD_FORMAT_WITH_DEFAULT)
+        env_path = write_env(tmp_path, "DB_PASSWORD=from-dotenv\n")
+
+        manager = ConfigManager(
+            str(config_path), secret_origin="local", dotenv_path=str(env_path)
+        )
+
+        assert manager.get("DB_PASSWORD") == "from-dotenv"
+
+    def test_old_format_resolution_precedence_default_fallback(
+        self, tmp_path, monkeypatch
+    ):
+        """Old format: YAML default is used when os.environ and .env are empty."""
+        monkeypatch.delenv("DB_PASSWORD", raising=False)
+        config_path = write_config(tmp_path, self.YAML_OLD_FORMAT_WITH_DEFAULT)
+        env_path = write_env(tmp_path, "")
+
+        manager = ConfigManager(
+            str(config_path), secret_origin="local", dotenv_path=str(env_path)
+        )
+
+        assert manager.get("DB_PASSWORD") == "yaml-default"
+
+    def test_old_format_variable_origin_override_works(
+        self, tmp_path, monkeypatch
+    ):
+        """Old format: per-variable origin override resolves via correct loader."""
+        monkeypatch.setenv("GCP_PROJECT_ID", "test-project")
+        config_path = write_config(
+            tmp_path,
+            """
+            variables:
+              API_TOKEN:
+                source: projects/app/secrets/TOKEN
+                origin: gcp
+            """,
+        )
+
+        class FakeLoader:
+            def get_many(self, keys):
+                return {key: "gcp-value" for key in keys}
+
+        loader_calls: list[tuple[str, str | None, str | None]] = []
+
+        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+            loader_calls.append((origin, gcp_project_id, dotenv_path))
+            return FakeLoader()
+
+        monkeypatch.setattr(manager_module, "create_loader", fake_create_loader)
+
+        manager = ConfigManager(str(config_path), auto_load=True)
+
+        assert manager.get("API_TOKEN") == "gcp-value"
+        assert len(loader_calls) == 1
+        assert loader_calls[0][0] == "gcp"
+        assert loader_calls[0][1] == "test-project"
+
+    def test_old_format_variable_environment_override_raises(
+        self, tmp_path, monkeypatch
+    ):
+        """Old format: per-variable environment override raises ValueError (no environments dict)."""
+        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        config_path = write_config(
+            tmp_path,
+            """
+            variables:
+              DB_PASSWORD:
+                source: DB_PASSWORD
+                environment: production
+            """,
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            ConfigManager(str(config_path), auto_load=True)
+
+        message = str(exc_info.value)
+        assert "DB_PASSWORD" in message
+        assert "production" in message
+
+    def test_old_format_via_init_config_and_require_config(
+        self, tmp_path, monkeypatch
+    ):
+        """Old format: init_config / get_config / require_config work end-to-end."""
+        monkeypatch.delenv("SECRET_ORIGIN", raising=False)
+        config_path = write_config(
+            tmp_path,
+            """
+            variables:
+              DB_PASSWORD:
+                source: DB_PASSWORD
+            validation:
+              required:
+                - DB_PASSWORD
+            """,
+        )
+        env_path = write_env(tmp_path, "DB_PASSWORD=via-singleton\n")
+
+        init_config(str(config_path), secret_origin="local", dotenv_path=str(env_path))
+
+        assert get_config("DB_PASSWORD") == "via-singleton"
+        assert require_config("DB_PASSWORD") == "via-singleton"
+
+    def test_old_format_with_environment_var_set_does_not_raise(
+        self, tmp_path, monkeypatch
+    ):
+        """Old format: ENVIRONMENT env var is ignored when no environments dict exists."""
+        monkeypatch.setenv("ENVIRONMENT", "staging")
+        config_path = write_config(
+            tmp_path,
+            """
+            variables:
+              DB_PASSWORD:
+                source: DB_PASSWORD
+                default: some-default
+            """,
+        )
+
+        manager = ConfigManager(str(config_path), auto_load=False)
+
+        assert manager.active_environment is None
 
 
 # ===========================================================================
