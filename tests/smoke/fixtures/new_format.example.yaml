@@ -1,13 +1,6 @@
-# New format — environments block selects loader and credentials per environment.
-# Used by both new-format cases; ENVIRONMENT env var switches between them.
-#
-# Case 3: ENVIRONMENT=gcp   → GCPSecretLoader, project overridden by gcp_project_id param.
-#          Requires GCP secrets named APP_DB_NAME, APP_DB_HOST, APP_DB_PORT,
-#          APP_DB_USER, APP_DB_PASSWORD.
-# Case 4: ENVIRONMENT=local → DotEnvLoader reading .env in the same directory.
-#
-# gcp_project_id below is a placeholder; always overridden at runtime by the
-# gcp_project_id= parameter or SMOKE_GCP_PROJECT_ID env var.
+# New format — environments block selects loader per environment.
+# ENVIRONMENT=gcp   → GCPSecretLoader (project from gcp_project_id)
+# ENVIRONMENT=local → DotEnvLoader reading .env in the same directory
 
 environments:
   local:
@@ -15,7 +8,7 @@ environments:
     dotenv_path: .env
   gcp:
     origin: gcp
-    gcp_project_id: smoke-placeholder
+    gcp_project_id: <your-gcp-project-id>
 
 variables:
   APP_DB_NAME:

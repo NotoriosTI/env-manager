@@ -2,8 +2,8 @@
 
 GCP cases use real credentials when .env.smoke is present at the project root:
     SMOKE_GCP_PROJECT_ID=your-project-id
-    (GCP Secret Manager must have secrets named APP_DB_NAME, APP_DB_HOST,
-     APP_DB_PORT, APP_DB_USER, APP_DB_PASSWORD)
+    (GCP Secret Manager must have secrets named JUAN_DB_NAME, JUAN_DB_HOST,
+     JUAN_DB_PORT, JUAN_DB_USER)
 
 Without .env.smoke the GCP cases fall back to a mock loader (no network, no creds).
 All resolved values are always masked — real secrets are never printed.
@@ -60,8 +60,13 @@ GCP_PROJECT_ID: str = _smoke_cfg.get("SMOKE_GCP_PROJECT_ID", "mock-project")
 
 # Vars to scrub at case START so the case doesn't inherit caller shell state.
 _SCRUB_ON_ENTRY = (
-    "APP_DB_NAME", "APP_DB_HOST", "APP_DB_PORT", "APP_DB_USER", "APP_DB_PASSWORD",
-    "GCP_PROJECT_ID", "SECRET_ORIGIN", "ENVIRONMENT",
+    "JUAN_DB_NAME",
+    "JUAN_DB_HOST",
+    "JUAN_DB_PORT",
+    "JUAN_DB_USER",
+    "GCP_PROJECT_ID",
+    "SECRET_ORIGIN",
+    "ENVIRONMENT",
 )
 
 
@@ -103,7 +108,11 @@ def isolated_env(label: str):
     finally:
         # Capture what the case wrote before restoring
         added = [k for k in os.environ if k not in full_snapshot]
-        modified = [k for k in os.environ if k in full_snapshot and os.environ[k] != full_snapshot[k]]
+        modified = [
+            k
+            for k in os.environ
+            if k in full_snapshot and os.environ[k] != full_snapshot[k]
+        ]
 
         os.environ.clear()
         os.environ.update(full_snapshot)
@@ -119,6 +128,7 @@ def isolated_env(label: str):
 # Loader interception — confirms a fresh loader is created per case
 # ---------------------------------------------------------------------------
 
+
 def _make_loader_spy(real_gcp: bool):
     """Return a create_loader wrapper that logs each instantiation."""
     loader_log: list[str] = []
@@ -129,14 +139,18 @@ def _make_loader_spy(real_gcp: bool):
         if origin == "gcp":
             loader_log.append(f"GCP(mock, project={gcp_project_id})")
             return _MockGCPLoader()
-        loader_log.append(f"DotEnv(path={Path(dotenv_path).name if dotenv_path else None})")
+        loader_log.append(
+            f"DotEnv(path={Path(dotenv_path).name if dotenv_path else None})"
+        )
         return DotEnvLoader(dotenv_path=dotenv_path)
 
     def _spy_real_loader(origin, *, gcp_project_id=None, dotenv_path=None):
         if origin == "gcp":
             loader_log.append(f"GCP(real, project={gcp_project_id})")
         else:
-            loader_log.append(f"DotEnv(path={Path(dotenv_path).name if dotenv_path else None})")
+            loader_log.append(
+                f"DotEnv(path={Path(dotenv_path).name if dotenv_path else None})"
+            )
         return _original(origin, gcp_project_id=gcp_project_id, dotenv_path=dotenv_path)
 
     wrapper = _spy_real_loader if real_gcp else _mock_gcp_loader
@@ -145,11 +159,10 @@ def _make_loader_spy(real_gcp: bool):
 
 class _MockGCPLoader:
     _SECRETS = {
-        "APP_DB_NAME":     "mock-juandb",
-        "APP_DB_HOST":     "127.0.0.1",
-        "APP_DB_PORT":     "5432",
-        "APP_DB_USER":     "mock-automation-admin",
-        "APP_DB_PASSWORD": "mock-wyshuq-vuncuv-3hitqU",
+        "JUAN_DB_NAME": "juandb",
+        "JUAN_DB_HOST": "127.0.0.1",
+        "JUAN_DB_PORT": "5432",
+        "JUAN_DB_USER": "automation_admin",
     }
 
     def get_many(self, keys: list[str]) -> dict[str, str | None]:
@@ -163,14 +176,13 @@ class _MockGCPLoader:
 # The 4 cases
 # ---------------------------------------------------------------------------
 
-_VARS = ("APP_DB_NAME", "APP_DB_HOST", "APP_DB_PORT", "APP_DB_USER", "APP_DB_PASSWORD")
+_VARS = ("JUAN_DB_NAME", "JUAN_DB_HOST", "JUAN_DB_PORT", "JUAN_DB_USER")
 
 _DOTENV_CONTENT = (
-    "APP_DB_NAME=juandb\n"
-    "APP_DB_HOST=127.0.0.1\n"
-    "APP_DB_PORT=5432\n"
-    "APP_DB_USER=automation_admin\n"
-    "APP_DB_PASSWORD=wyshuq-vuncuv-3hitqU\n"
+    "JUAN_DB_NAME=juandb\n"
+    "JUAN_DB_HOST=127.0.0.1\n"
+    "JUAN_DB_PORT=5432\n"
+    "JUAN_DB_USER=automation_admin\n"
 )
 
 
@@ -179,14 +191,18 @@ def case_1_old_dotenv(tmp: Path) -> dict[str, Any]:
     env = tmp / ".env"
     cfg.write_text((FIXTURES / "old_dotenv.yaml").read_text(), encoding="utf-8")
     env.write_text(_DOTENV_CONTENT, encoding="utf-8")
-    mgr = ConfigManager(str(cfg), secret_origin="local", dotenv_path=str(env), debug=False)
+    mgr = ConfigManager(
+        str(cfg), secret_origin="local", dotenv_path=str(env), debug=False
+    )
     return {k: mgr.get(k) for k in _VARS}
 
 
 def case_2_old_gcp(tmp: Path) -> dict[str, Any]:
     cfg = tmp / "config.yaml"
     cfg.write_text((FIXTURES / "old_gcp.yaml").read_text(), encoding="utf-8")
-    mgr = ConfigManager(str(cfg), secret_origin="gcp", gcp_project_id=GCP_PROJECT_ID, debug=False)
+    mgr = ConfigManager(
+        str(cfg), secret_origin="gcp", gcp_project_id=GCP_PROJECT_ID, debug=False
+    )
     return {k: mgr.get(k) for k in _VARS}
 
 
@@ -194,7 +210,9 @@ def case_3_new_gcp(tmp: Path) -> dict[str, Any]:
     cfg = tmp / "config.yaml"
     cfg.write_text((FIXTURES / "new_format.yaml").read_text(), encoding="utf-8")
     os.environ["ENVIRONMENT"] = "gcp"
-    mgr = ConfigManager(str(cfg), gcp_project_id=GCP_PROJECT_ID, debug=False)
+    mgr = ConfigManager(
+        str(cfg), secret_origin="gcp", gcp_project_id=GCP_PROJECT_ID, debug=False
+    )
     return {k: mgr.get(k) for k in _VARS}
 
 
@@ -204,7 +222,9 @@ def case_4_new_dotenv(tmp: Path) -> dict[str, Any]:
     cfg.write_text((FIXTURES / "new_format.yaml").read_text(), encoding="utf-8")
     env.write_text(_DOTENV_CONTENT, encoding="utf-8")
     os.environ["ENVIRONMENT"] = "local"
-    mgr = ConfigManager(str(cfg), debug=False)
+    mgr = ConfigManager(
+        str(cfg), secret_origin="local", dotenv_path=str(env), debug=True
+    )
     return {k: mgr.get(k) for k in _VARS}
 
 
@@ -212,14 +232,19 @@ def case_4_new_dotenv(tmp: Path) -> dict[str, Any]:
 # Display helpers
 # ---------------------------------------------------------------------------
 
+
 def _safe_display(value: Any) -> Text:
     if value is None:
         return Text("None", style="dim red")
     return Text(mask_secret(str(value)), style="bold white")
 
 
-def _values_table(values: dict[str, Any], loader_log: list[str], elapsed: float) -> Table:
-    tbl = Table(box=box.SIMPLE, show_header=True, header_style="bold dim", padding=(0, 1))
+def _values_table(
+    values: dict[str, Any], loader_log: list[str], elapsed: float
+) -> Table:
+    tbl = Table(
+        box=box.SIMPLE, show_header=True, header_style="bold dim", padding=(0, 1)
+    )
     tbl.add_column("variable", style="dim")
     tbl.add_column("value (masked)")
     tbl.add_column("loaded", justify="center")
@@ -237,14 +262,32 @@ def _values_table(values: dict[str, Any], loader_log: list[str], elapsed: float)
 
 
 CASES = [
-    ("1", "Old format — .env", "old", "local", False, case_1_old_dotenv, "old_dotenv.yaml"),
-    ("2", "Old format — GCP",  "old", "gcp",   True,  case_2_old_gcp,    "old_gcp.yaml"),
-    ("3", "New format — GCP",  "new", "gcp",   True,  case_3_new_gcp,    "new_format.yaml"),
-    ("4", "New format — .env", "new", "local", False, case_4_new_dotenv, "new_format.yaml"),
+    (
+        "1",
+        "Old format — .env",
+        "old",
+        "local",
+        False,
+        case_1_old_dotenv,
+        "old_dotenv.yaml",
+    ),
+    ("2", "Old format — GCP", "old", "gcp", True, case_2_old_gcp, "old_gcp.yaml"),
+    ("3", "New format — GCP", "new", "gcp", True, case_3_new_gcp, "new_format.yaml"),
+    (
+        "4",
+        "New format — .env",
+        "new",
+        "local",
+        False,
+        case_4_new_dotenv,
+        "new_format.yaml",
+    ),
 ]
 
 
-def _case_title(num: str, label: str, fmt: str, origin: str, uses_gcp: bool, fixture: str) -> Text:
+def _case_title(
+    num: str, label: str, fmt: str, origin: str, uses_gcp: bool, fixture: str
+) -> Text:
     fmt_color = "cyan" if fmt == "new" else "yellow"
     origin_color = "magenta" if origin == "gcp" else "green"
     t = Text()
@@ -253,7 +296,9 @@ def _case_title(num: str, label: str, fmt: str, origin: str, uses_gcp: bool, fix
     t.append(f"  [{fmt}]", style=f"bold {fmt_color}")
     t.append(f" [{origin}]", style=f"bold {origin_color}")
     if uses_gcp:
-        badge, style = ("real GCP", "bold bright_magenta") if REAL_GCP else ("mocked", "dim")
+        badge, style = (
+            ("real GCP", "bold bright_magenta") if REAL_GCP else ("mocked", "dim")
+        )
         t.append(f"  [{badge}]", style=style)
     t.append(f"  [dim]{fixture}[/dim]")
     return t
@@ -262,9 +307,15 @@ def _case_title(num: str, label: str, fmt: str, origin: str, uses_gcp: bool, fix
 def run_all() -> None:
     console.print(Rule("[bold white]env-manager smoke test[/bold white]"))
     gcp_line = (
-        Text(f"  GCP project: {GCP_PROJECT_ID}  (secrets: APP_DB_*)", style="bright_magenta")
+        Text(
+            f"  GCP project: {GCP_PROJECT_ID}  (secrets: JUAN_DB_*)",
+            style="bright_magenta",
+        )
         if REAL_GCP
-        else Text("  GCP: .env.smoke not found — GCP cases use mock loader", style="dim yellow")
+        else Text(
+            "  GCP: .env.smoke not found — GCP cases use mock loader",
+            style="dim yellow",
+        )
     )
     console.print(gcp_line)
     console.print()
@@ -285,7 +336,11 @@ def run_all() -> None:
                         values = fn(tmp)
                     elapsed = time.perf_counter() - t0
                     passed = all(v is not None for v in values.values())
-                    status = Text("✓ PASS", style="bold green") if passed else Text("⚠ PARTIAL", style="bold yellow")
+                    status = (
+                        Text("✓ PASS", style="bold green")
+                        if passed
+                        else Text("⚠ PARTIAL", style="bold yellow")
+                    )
                     content = _values_table(values, loader_log, elapsed)
                 except Exception as exc:
                     elapsed = time.perf_counter() - t0
@@ -309,7 +364,11 @@ def run_all() -> None:
     summary.add_column("Result", justify="center")
 
     for i, (label, passed, elapsed) in enumerate(results, 1):
-        result_text = Text("✓ PASS", style="bold green") if passed else Text("✗ FAIL", style="bold red")
+        result_text = (
+            Text("✓ PASS", style="bold green")
+            if passed
+            else Text("✗ FAIL", style="bold red")
+        )
         summary.add_row(str(i), label, f"{elapsed:.2f}s", result_text)
 
     console.print(summary)
@@ -319,7 +378,9 @@ def run_all() -> None:
     if passed_count == total:
         console.print(f"\n[bold green]All {total} cases passed.[/bold green]\n")
     else:
-        console.print(f"\n[bold red]{total - passed_count}/{total} cases failed.[/bold red]\n")
+        console.print(
+            f"\n[bold red]{total - passed_count}/{total} cases failed.[/bold red]\n"
+        )
         sys.exit(1)
 
 

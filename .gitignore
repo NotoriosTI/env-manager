@@ -45,6 +45,12 @@ config_vars.yaml
 *.pem
 *.key
 
+# Fixture files with real credentials (use *.example.yaml for templates)
+tests/fixtures/*.yaml
+!tests/fixtures/*.example.yaml
+tests/smoke/fixtures/*.yaml
+!tests/smoke/fixtures/*.example.yaml
+
 # OS
 .DS_Store
 Thumbs.db

@@ -14,7 +14,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 @pytest.fixture
 def prod_config(tmp_path: Path) -> Path:
-    config_source = FIXTURES / "prod_config.yaml"
+    config_source = FIXTURES / "prod_config.example.yaml"
     config_path = tmp_path / "config.yaml"
     config_path.write_text(config_source.read_text(), encoding="utf-8")
     return config_path

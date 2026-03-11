@@ -1,21 +1,26 @@
 variables:
-  ODOO_PROD_URL:
-    source: ODOO_PROD_URL
+  APP_DB_NAME:
+    source: APP_DB_NAME
     type: str
-  OPENAI_API_KEY:
-    source: OPENAI_API_KEY
+  APP_DB_HOST:
+    source: APP_DB_HOST
     type: str
-  ANTHROPIC_API_KEY:
-    source: ANTHROPIC_API_KEY
-    type: str
-  SLACK_BOT_TOKEN:
-    source: SLACK_BOT_TOKEN
+  APP_DB_PORT:
+    source: APP_DB_PORT
+    type: int
+  APP_DB_USER:
+    source: APP_DB_USER
     type: str
 
+environments:
+  default:
+    origin: gcp
+    gcp_project_id: <your-gcp-project-id>
+
 validation:
-  strict: false
+  strict: true
   required:
-    - ODOO_PROD_URL
-    - OPENAI_API_KEY
-    - ANTHROPIC_API_KEY
-    - SLACK_BOT_TOKEN
+    - APP_DB_NAME
+    - APP_DB_HOST
+    - APP_DB_PORT
+    - APP_DB_USER
