@@ -2,26 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from textwrap import dedent
-
 import pytest
 
 import env_manager.manager as manager_module
 from env_manager import ConfigManager
-
-
-@pytest.fixture(autouse=True)
-def reset_singleton():
-    manager_module._SINGLETON = None
-    yield
-    manager_module._SINGLETON = None
-
-
-def _write_config(tmp_path: Path, yaml_text: str) -> Path:
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(dedent(yaml_text), encoding="utf-8")
-    return config_path
+from conftest import write_config
 
 
 def test_default_only_variables_resolve_from_yaml_without_loader(
@@ -29,7 +14,7 @@ def test_default_only_variables_resolve_from_yaml_without_loader(
 ):
     monkeypatch.setenv("LOG_LEVEL", "TRACE")
 
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
@@ -59,7 +44,7 @@ def test_default_only_variables_resolve_from_yaml_without_loader(
 def test_default_only_variable_ignores_same_named_os_environ(tmp_path, monkeypatch):
     monkeypatch.setenv("TIMEOUT", "99")
 
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
@@ -77,7 +62,7 @@ def test_default_only_variable_ignores_same_named_os_environ(tmp_path, monkeypat
 
 
 def test_variable_with_source_and_default_uses_loader_value(tmp_path):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
@@ -102,7 +87,7 @@ def test_variable_with_source_and_default_uses_loader_value(tmp_path):
 
 
 def test_variable_with_source_and_default_falls_back_to_default(tmp_path):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
@@ -127,7 +112,7 @@ def test_variable_with_source_and_default_falls_back_to_default(tmp_path):
 
 
 def test_mixed_config_fetches_only_sourced_variables(tmp_path, monkeypatch):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
@@ -158,7 +143,7 @@ def test_mixed_config_fetches_only_sourced_variables(tmp_path, monkeypatch):
 
 
 def test_variable_with_neither_source_nor_default_raises(tmp_path):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
