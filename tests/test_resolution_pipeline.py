@@ -316,3 +316,39 @@ def test_origin_local_with_dotenv_path_is_independent_of_active_environment(
     manager = ConfigManager(str(config_path), auto_load=True)
 
     assert manager.get("LOCAL_ONLY_TOKEN") == "from-special"
+
+
+def test_variable_dotenv_path_override_with_absolute_path(tmp_path, monkeypatch):
+    """A variable dotenv_path set to an absolute path loads from that exact file."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.delenv("API_KEY", raising=False)
+
+    # Create an external directory outside the repo with a separate .env file
+    external_dir = tmp_path / "external"
+    external_dir.mkdir()
+    external_env = external_dir / ".env.external"
+    external_env.write_text("API_KEY=from-absolute\n", encoding="utf-8")
+
+    config_path = write_repo_config(
+        repo_root,
+        f"""
+        environments:
+          staging:
+            origin: local
+            dotenv_path: env/.env.staging
+        variables:
+          API_KEY:
+            source: API_KEY
+            dotenv_path: {str(external_env)}
+        validation:
+          strict: false
+        """,
+    )
+    (repo_root / "env").mkdir()
+    (repo_root / "env" / ".env.staging").write_text("API_KEY=from-staging\n", encoding="utf-8")
+
+    manager = ConfigManager(str(config_path), auto_load=True)
+
+    assert manager.get("API_KEY") == "from-absolute"
