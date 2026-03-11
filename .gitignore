@@ -38,6 +38,8 @@ ENV/
 .coverage
 htmlcov/
 
+uv.lock
+
 # Secrets (never commit!)
 .env
 .env.smoke
