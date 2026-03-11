@@ -16,6 +16,7 @@ class EnvironmentConfig:
     origin: str
     dotenv_path: Optional[str] = None
     gcp_project_id: Optional[str] = None
+    is_default: bool = False
 
 
 def parse_environments(
@@ -91,11 +92,21 @@ def parse_environments(
                     "'gcp_project_id'"
                 )
 
+        is_default = bool(env_data.get("default", False))
+
         result[env_name] = EnvironmentConfig(
             name=env_name,
             origin=origin,
             dotenv_path=dotenv_path,
             gcp_project_id=gcp_project_id,
+            is_default=is_default,
+        )
+
+    explicit_defaults = [name for name, cfg in result.items() if cfg.is_default]
+    if len(explicit_defaults) > 1:
+        raise ValueError(
+            f"Only one environment may set 'default: true', "
+            f"but found multiple: {explicit_defaults}"
         )
 
     return result

@@ -207,6 +207,12 @@ class ConfigManager:
             return self._environments[env_name]
 
         # ENVIRONMENT not set -- fall back to "default" if it exists
+        # Explicit default: true marker takes precedence over key name
+        explicit_defaults = [e for e in self._environments.values() if e.is_default]
+        if explicit_defaults:
+            return explicit_defaults[0]  # parse_environments guarantees at most one
+
+        # Fall back to environment literally named "default"
         return self._environments.get("default")
 
     @property
