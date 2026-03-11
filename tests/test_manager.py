@@ -90,6 +90,7 @@ def test_strict_mode_raises_on_missing(tmp_path):
             strict=True,
         )
     assert "Strict mode:" in str(exc.value)
+    assert "DB_PASSWORD" in str(exc.value)
 
 
 def test_singleton_api(tmp_path):
