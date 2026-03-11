@@ -25,3 +25,4 @@ build-backend = "poetry.core.masonry.api"
 markers = [
   "integration: marks tests as integration tests (require real GCP access)",
 ]
+pythonpath = ["tests"]

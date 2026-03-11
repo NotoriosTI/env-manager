@@ -3,23 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from textwrap import dedent
 
 import env_manager.manager as manager_module
 from env_manager import ConfigManager
-
-
-def _write_config(tmp_path: Path, yaml_text: str) -> Path:
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(dedent(yaml_text), encoding="utf-8")
-    return config_path
-
-
-def _write_repo_config(repo_root: Path, yaml_text: str) -> Path:
-    (repo_root / "pyproject.toml").write_text("[project]\nname='test-app'\n", encoding="utf-8")
-    config_dir = repo_root / "config"
-    config_dir.mkdir()
-    return _write_config(config_dir, yaml_text)
+from conftest import write_config, write_repo_config
 
 
 def test_sourced_value_prefers_os_environ_over_active_environment_dotenv(
@@ -28,7 +15,7 @@ def test_sourced_value_prefers_os_environ_over_active_environment_dotenv(
     monkeypatch.setenv("ENVIRONMENT", "staging")
     monkeypatch.setenv("API_KEY", "from-os")
 
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         environments:
@@ -60,7 +47,7 @@ def test_sourced_value_uses_active_environment_dotenv_when_os_environ_missing(
     monkeypatch.setenv("ENVIRONMENT", "staging")
     monkeypatch.delenv("API_KEY", raising=False)
 
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         environments:
@@ -90,7 +77,7 @@ def test_sourced_value_falls_back_to_yaml_default_after_os_environ_and_dotenv(
     monkeypatch.setenv("ENVIRONMENT", "staging")
     monkeypatch.delenv("PORT", raising=False)
 
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         environments:
@@ -122,7 +109,7 @@ def test_variable_origin_override_uses_gcp_loader_while_active_environment_is_lo
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("API_KEY", raising=False)
 
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         environments:
@@ -164,7 +151,7 @@ def test_os_environ_beats_pinned_environment_lookup(tmp_path, monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "staging")
     monkeypatch.setenv("API_KEY", "from-os")
 
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         environments:
@@ -196,7 +183,7 @@ def test_variables_without_overrides_keep_active_environment_behavior(
     monkeypatch.delenv("SHARED_TOKEN", raising=False)
     monkeypatch.delenv("OVERRIDDEN_TOKEN", raising=False)
 
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         environments:
@@ -238,7 +225,7 @@ def test_variable_dotenv_path_override_uses_project_root_relative_path(
     monkeypatch.setenv("ENVIRONMENT", "staging")
     monkeypatch.delenv("API_KEY", raising=False)
 
-    config_path = _write_repo_config(
+    config_path = write_repo_config(
         repo_root,
         """
         environments:
@@ -271,7 +258,7 @@ def test_pinned_environment_without_other_overrides_uses_environment_defaults(
     monkeypatch.setenv("ENVIRONMENT", "staging")
     monkeypatch.delenv("API_KEY", raising=False)
 
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         environments:
@@ -305,7 +292,7 @@ def test_origin_local_with_dotenv_path_is_independent_of_active_environment(
     monkeypatch.setenv("ENVIRONMENT", "prod")
     monkeypatch.delenv("LOCAL_ONLY_TOKEN", raising=False)
 
-    config_path = _write_repo_config(
+    config_path = write_repo_config(
         repo_root,
         """
         environments:

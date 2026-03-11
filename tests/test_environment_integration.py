@@ -4,35 +4,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from textwrap import dedent
 
 import pytest
 
 import env_manager.manager as manager_module
 from env_manager import ConfigManager, get_config, init_config, require_config
-
-
-@pytest.fixture(autouse=True)
-def reset_singleton():
-    manager_module._SINGLETON = None
-    yield
-    manager_module._SINGLETON = None
-
-
-# ---------------------------------------------------------------------------
-# Helper to write a YAML config with a simple variable
-# ---------------------------------------------------------------------------
-
-def _write_config(tmp_path: Path, yaml_text: str) -> Path:
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(dedent(yaml_text), encoding="utf-8")
-    return config_path
-
-
-def _write_env(tmp_path: Path, content: str = "DB_PASSWORD=secret123\n") -> Path:
-    env_path = tmp_path / ".env"
-    env_path.write_text(content, encoding="utf-8")
-    return env_path
+from conftest import write_config, write_env
 
 
 # ===========================================================================
@@ -62,7 +39,7 @@ class TestEnvironmentSelection:
     def test_environment_var_selects_staging(self, tmp_path, monkeypatch):
         """ENVIRONMENT=staging selects staging config."""
         monkeypatch.setenv("ENVIRONMENT", "staging")
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
         staging_env = tmp_path / ".env.staging"
         staging_env.write_text("DB_PASSWORD=staging_secret\n", encoding="utf-8")
 
@@ -76,8 +53,8 @@ class TestEnvironmentSelection:
     def test_environment_unset_falls_back_to_default(self, tmp_path, monkeypatch):
         """Omitting ENVIRONMENT falls back to default environment."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
-        _write_env(tmp_path)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
+        write_env(tmp_path)
 
         mgr = ConfigManager(str(config_path), auto_load=False)
 
@@ -87,7 +64,7 @@ class TestEnvironmentSelection:
     def test_undefined_environment_raises_value_error(self, tmp_path, monkeypatch):
         """ENVIRONMENT=unknown raises ValueError with descriptive message."""
         monkeypatch.setenv("ENVIRONMENT", "unknown")
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
 
         with pytest.raises(ValueError, match="unknown"):
             ConfigManager(str(config_path), auto_load=False)
@@ -95,7 +72,7 @@ class TestEnvironmentSelection:
     def test_undefined_environment_error_lists_available(self, tmp_path, monkeypatch):
         """Error message lists available environment names."""
         monkeypatch.setenv("ENVIRONMENT", "typo")
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
 
         with pytest.raises(ValueError) as exc_info:
             ConfigManager(str(config_path), auto_load=False)
@@ -109,8 +86,8 @@ class TestEnvironmentSelection:
         """Active environment's origin is used as secret_origin."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
         monkeypatch.delenv("SECRET_ORIGIN", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
-        _write_env(tmp_path)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
+        write_env(tmp_path)
 
         mgr = ConfigManager(str(config_path), auto_load=False)
 
@@ -122,7 +99,7 @@ class TestEnvironmentSelection:
         monkeypatch.delenv("GCP_PROJECT_ID", raising=False)
         # Change cwd so find_dotenv doesn't discover the project's real .env
         monkeypatch.chdir(tmp_path)
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
 
         mgr = ConfigManager(str(config_path), auto_load=False)
 
@@ -133,7 +110,7 @@ class TestEnvironmentSelection:
     ):
         monkeypatch.setenv("ENVIRONMENT", "staging")
         monkeypatch.chdir(tmp_path)
-        config_path = _write_config(
+        config_path = write_config(
             tmp_path,
             """
             environments:
@@ -188,7 +165,7 @@ class TestEnvironmentSelection:
     ):
         monkeypatch.setenv("ENVIRONMENT", "staging")
         monkeypatch.chdir(tmp_path)
-        config_path = _write_config(
+        config_path = write_config(
             tmp_path,
             """
             environments:
@@ -236,7 +213,7 @@ class TestEnvironmentSelection:
     ):
         monkeypatch.delenv("ENVIRONMENT", raising=False)
         monkeypatch.setenv("API_TOKEN", "from-os")
-        config_path = _write_config(
+        config_path = write_config(
             tmp_path,
             """
             environments:
@@ -266,7 +243,7 @@ class TestEnvironmentSelection:
         self, tmp_path, monkeypatch
     ):
         monkeypatch.delenv("ENVIRONMENT", raising=False)
-        config_path = _write_config(
+        config_path = write_config(
             tmp_path,
             """
             variables:
@@ -300,7 +277,7 @@ class TestNoDefaultEnvironment:
     def test_no_default_no_env_var_returns_none(self, tmp_path, monkeypatch):
         """No immediate crash -- active_environment is None (deferred error)."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_NO_DEFAULT)
+        config_path = write_config(tmp_path, self.YAML_NO_DEFAULT)
 
         mgr = ConfigManager(str(config_path), auto_load=False)
 
@@ -327,8 +304,8 @@ class TestBackwardsCompatibility:
     def test_old_format_active_environment_is_none(self, tmp_path, monkeypatch):
         """Old format: active_environment is None."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_OLD_FORMAT)
-        _write_env(tmp_path)
+        config_path = write_config(tmp_path, self.YAML_OLD_FORMAT)
+        write_env(tmp_path)
 
         mgr = ConfigManager(str(config_path), auto_load=False)
 
@@ -337,8 +314,8 @@ class TestBackwardsCompatibility:
     def test_old_format_uses_param_secret_origin(self, tmp_path, monkeypatch):
         """Old format: secret_origin param works as before."""
         monkeypatch.delenv("SECRET_ORIGIN", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_OLD_FORMAT)
-        env_path = _write_env(tmp_path)
+        config_path = write_config(tmp_path, self.YAML_OLD_FORMAT)
+        env_path = write_env(tmp_path)
 
         mgr = ConfigManager(
             str(config_path), secret_origin="local",
@@ -350,8 +327,8 @@ class TestBackwardsCompatibility:
     def test_old_format_loads_successfully(self, tmp_path, monkeypatch):
         """Old format: full load cycle works."""
         monkeypatch.delenv("SECRET_ORIGIN", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_OLD_FORMAT)
-        env_path = _write_env(tmp_path)
+        config_path = write_config(tmp_path, self.YAML_OLD_FORMAT)
+        env_path = write_env(tmp_path)
 
         mgr = ConfigManager(
             str(config_path), secret_origin="local",
@@ -383,8 +360,8 @@ class TestParamOverrides:
         """secret_origin param wins over active environment's origin."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
         monkeypatch.delenv("SECRET_ORIGIN", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
-        env_path = _write_env(tmp_path)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
+        env_path = write_env(tmp_path)
 
         mgr = ConfigManager(
             str(config_path), secret_origin="local",
@@ -397,7 +374,7 @@ class TestParamOverrides:
         """gcp_project_id param wins over active environment's gcp_project_id."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
         monkeypatch.delenv("GCP_PROJECT_ID", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
 
         mgr = ConfigManager(
             str(config_path), gcp_project_id="override-project",
@@ -418,7 +395,7 @@ class TestParamOverrides:
           DB_PASSWORD:
             source: DB_PASSWORD
         """
-        config_path = _write_config(tmp_path, yaml_local)
+        config_path = write_config(tmp_path, yaml_local)
         custom_env = tmp_path / ".env.custom"
         custom_env.write_text("DB_PASSWORD=custom\n", encoding="utf-8")
 
@@ -454,8 +431,8 @@ class TestSingletonWithEnvironments:
     def test_init_config_with_environments(self, tmp_path, monkeypatch):
         """init_config works with new-format YAML."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
-        env_path = _write_env(tmp_path)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
+        env_path = write_env(tmp_path)
 
         mgr = init_config(str(config_path), dotenv_path=str(env_path))
 
@@ -465,8 +442,8 @@ class TestSingletonWithEnvironments:
     def test_init_config_signatures_unchanged(self, tmp_path, monkeypatch):
         """init_config accepts all original kwargs."""
         monkeypatch.delenv("ENVIRONMENT", raising=False)
-        config_path = _write_config(tmp_path, self.YAML_WITH_ENVS)
-        env_path = _write_env(tmp_path)
+        config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
+        env_path = write_env(tmp_path)
 
         # All original kwargs should be accepted without error
         mgr = init_config(

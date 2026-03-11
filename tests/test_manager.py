@@ -11,14 +11,6 @@ from env_manager import ConfigManager, get_config, init_config, require_config
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-@pytest.fixture(autouse=True)
-def reset_singleton(monkeypatch):
-    manager_module._SINGLETON = None  # type: ignore[attr-defined]
-    for key in ("DB_PASSWORD", "PORT", "DEBUG_MODE", "TIMEOUT", "GCP_PROJECT_ID"):
-        monkeypatch.delenv(key, raising=False)
-    yield
-    manager_module._SINGLETON = None  # type: ignore[attr-defined]
-
 
 def _prepare_config(tmp_path: Path) -> tuple[Path, Path]:
     config_source = FIXTURES / "test_config.yaml"

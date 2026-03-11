@@ -1,40 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from textwrap import dedent
 
 import pytest
 
 import env_manager.manager as manager_module
 from env_manager import ConfigManager
-
-
-@pytest.fixture(autouse=True)
-def reset_singleton(monkeypatch):
-    manager_module._SINGLETON = None
-    for key in ("API_KEY", "OPTIONAL_TOKEN", "API_TOKEN", "GCP_PROJECT_ID"):
-        monkeypatch.delenv(key, raising=False)
-    yield
-    manager_module._SINGLETON = None
-
-
-def _write_config(tmp_path: Path, yaml_text: str) -> Path:
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(dedent(yaml_text), encoding="utf-8")
-    return config_path
-
-
-def _write_repo_config(repo_root: Path, yaml_text: str) -> Path:
-    (repo_root / "pyproject.toml").write_text("[project]\nname='test-app'\n", encoding="utf-8")
-    config_dir = repo_root / "config"
-    config_dir.mkdir()
-    return _write_config(config_dir, yaml_text)
+from conftest import write_config, write_repo_config
 
 
 def test_required_sourced_variable_missing_raises_runtime_error_with_context(
     tmp_path, capsys
 ):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         environments:
@@ -62,7 +40,7 @@ def test_required_sourced_variable_missing_raises_runtime_error_with_context(
 
 
 def test_required_sourced_variable_uses_yaml_default_and_warns(tmp_path, capsys):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
@@ -93,7 +71,7 @@ def test_required_sourced_variable_uses_yaml_default_and_warns(tmp_path, capsys)
 def test_optional_sourced_variable_without_default_resolves_none_and_warns(
     tmp_path, capsys
 ):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
@@ -121,7 +99,7 @@ def test_optional_sourced_variable_without_default_resolves_none_and_warns(
 
 
 def test_optional_sourced_variable_with_yaml_default_is_quiet(tmp_path, capsys):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
@@ -149,7 +127,7 @@ def test_optional_sourced_variable_with_yaml_default_is_quiet(tmp_path, capsys):
 
 
 def test_strict_mode_raises_before_optional_fallback(tmp_path):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         variables:
@@ -178,7 +156,7 @@ def test_strict_mode_raises_before_optional_fallback(tmp_path):
 def test_gcp_runtime_context_is_included_in_missing_value_messages(
     tmp_path, monkeypatch, capsys
 ):
-    config_path = _write_config(
+    config_path = write_config(
         tmp_path,
         """
         environments:
@@ -224,7 +202,7 @@ def test_missing_explicit_per_variable_dotenv_raises_only_when_lookup_needs_file
     monkeypatch.setenv("ENVIRONMENT", "staging")
     monkeypatch.delenv("API_KEY", raising=False)
 
-    config_path = _write_repo_config(
+    config_path = write_repo_config(
         repo_root,
         """
         environments:
@@ -260,7 +238,7 @@ def test_missing_explicit_per_variable_dotenv_is_bypassed_by_os_environ(
     monkeypatch.setenv("ENVIRONMENT", "staging")
     monkeypatch.setenv("API_KEY", "from-os")
 
-    config_path = _write_repo_config(
+    config_path = write_repo_config(
         repo_root,
         """
         environments:

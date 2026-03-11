@@ -7,6 +7,7 @@ import pytest
 
 import env_manager.manager as manager_module
 from env_manager import ConfigManager, get_config, init_config, require_config
+from conftest import write_repo_config
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -16,15 +17,6 @@ def prod_config(tmp_path: Path) -> Path:
     config_source = FIXTURES / "prod_config.yaml"
     config_path = tmp_path / "config.yaml"
     config_path.write_text(config_source.read_text(), encoding="utf-8")
-    return config_path
-
-
-def _write_repo_config(repo_root: Path, yaml_text: str) -> Path:
-    (repo_root / "pyproject.toml").write_text("[project]\nname='test-app'\n", encoding="utf-8")
-    config_dir = repo_root / "config"
-    config_dir.mkdir()
-    config_path = config_dir / "config.yaml"
-    config_path.write_text(yaml_text, encoding="utf-8")
     return config_path
 
 
@@ -111,7 +103,7 @@ def test_mixed_sources_load_in_one_eager_pass(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("PINNED_SECRET", raising=False)
     monkeypatch.delenv("GCP_SECRET", raising=False)
 
-    config_path = _write_repo_config(
+    config_path = write_repo_config(
         repo_root,
         """
 environments:
