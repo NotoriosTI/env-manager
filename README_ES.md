@@ -304,16 +304,18 @@ port = get_config("PORT")  # Ya es un int, con default 8080
 
 ```bash
 # Instalar dependencias
-poetry install
+uv sync
 
 # Ejecutar pruebas
-pytest -v
+uv run pytest -v
 
 # Ejecutar con cobertura
-pytest --cov=env_manager --cov-report=html
+uv run pytest --cov=env_manager --cov-report=html
 ```
 
+
 El proyecto usa Python 3.13+, Poetry para gestión de dependencias y pytest para pruebas.
+
 
 ## Licencia
 
