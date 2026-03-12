@@ -9,7 +9,7 @@ Add to your `pyproject.toml`:
 ```toml
 [project]
 dependencies = [
-    "env-manager @ git+https://github.com/NotoriosTI/libraries.git@main#subdirectory=env-manager",
+    "env-manager @ git+https://github.com/NotoriosTI/env-manager.git@main",
 ]
 ```
 
@@ -334,9 +334,11 @@ uv run pytest -v
 uv run pytest --cov=env_manager --cov-report=html
 ```
 
-The project uses Python 3.13+, uv for dependency management, and pytest for testing.
+The project uses Python 3.13+, Poetry for dependency management, and pytest for testing.
 
 ## License
 
-Internal NotoriosTI library.
+Copyright (c) 2025 NotoriosTI. All rights reserved.
+
+This software is proprietary and confidential. Unauthorized copying, distribution, or use of this software, in whole or in part, is strictly prohibited.
 

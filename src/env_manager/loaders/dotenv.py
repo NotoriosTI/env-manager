@@ -23,6 +23,7 @@ class DotEnvLoader(SecretLoader):
     """Load secrets from a .env file and the current environment."""
 
     def __init__(self, dotenv_path: Optional[str] = None) -> None:
+        self._explicit_path = dotenv_path is not None
         self._dotenv_path = self._resolve_path(dotenv_path)
         self._values = self._load_dotenv_values()
 
@@ -38,15 +39,30 @@ class DotEnvLoader(SecretLoader):
     def _load_dotenv_values(self) -> dict[str, str]:
         if not self._dotenv_path:
             return {}
+        if not Path(self._dotenv_path).exists():
+            return {}
         load_dotenv(self._dotenv_path, override=False)
         values = dotenv_values(self._dotenv_path)
         return {key: value for key, value in values.items() if value is not None}
 
     def get(self, key: str) -> Optional[str]:
+        self._ensure_file_backed_lookup_available([key])
         return os.environ.get(key, self._values.get(key))
 
     def get_many(self, keys: list[str]) -> dict[str, Optional[str]]:
+        self._ensure_file_backed_lookup_available(keys)
         return {key: self.get(key) for key in keys}
+
+    def _ensure_file_backed_lookup_available(self, keys: list[str]) -> None:
+        if not self._explicit_path or not self._dotenv_path:
+            return
+
+        if Path(self._dotenv_path).exists():
+            return
+
+        unresolved = [key for key in keys if key not in os.environ]
+        if unresolved:
+            raise FileNotFoundError(self._dotenv_path)
 
     @property
     def dotenv_path(self) -> Optional[str]:

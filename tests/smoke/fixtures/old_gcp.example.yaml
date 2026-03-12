@@ -1,0 +1,21 @@
+# Old format — no environments block.
+# Loader is selected at runtime via secret_origin="gcp".
+# Source keys are the GCP Secret Manager secret names.
+# Requires secrets named APP_DB_NAME, APP_DB_HOST, APP_DB_PORT,
+# APP_DB_USER, APP_DB_PASSWORD in SMOKE_GCP_PROJECT_ID.
+variables:
+  APP_DB_NAME:
+    source: APP_DB_NAME
+    type: str
+  APP_DB_HOST:
+    source: APP_DB_HOST
+    type: str
+  APP_DB_PORT:
+    source: APP_DB_PORT
+    type: int
+  APP_DB_USER:
+    source: APP_DB_USER
+    type: str
+  APP_DB_PASSWORD:
+    source: APP_DB_PASSWORD
+    type: str

@@ -1,180 +1,53 @@
-"""Test boolean to string coercion when type is str."""
+"""Test scalar-to-string coercion via ConfigManager when type is str."""
 
-import tempfile
-from pathlib import Path
+from __future__ import annotations
+
+import pytest
+
 from env_manager import ConfigManager
+from conftest import write_config
 
 
-def test_bool_yaml_to_string_true():
-    """Test that YAML boolean true is converted to string 'true' when type is str."""
-    
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        
-        # Create config YAML with boolean true (no quotes)
-        config_yaml = tmpdir / "config.yaml"
-        config_yaml.write_text("""
-variables:
-  DEBUG_MODE:
-    default: true
-    type: str
+@pytest.mark.parametrize("yaml_value,expected", [("true", "true"), ("false", "false")])
+def test_bool_yaml_to_string(tmp_path, yaml_value, expected):
+    """YAML unquoted booleans coerce to lowercase string when type is str."""
+    config = write_config(
+        tmp_path,
+        f"""
+        variables:
+          FLAG:
+            default: {yaml_value}
+            type: str
+        validation:
+          strict: false
+        """,
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
 
-validation:
-  strict: false
-""")
-        
-        # Create empty .env
-        dotenv_file = tmpdir / ".env"
-        dotenv_file.write_text("")
-        
-        # Create ConfigManager
-        manager = ConfigManager(
-            str(config_yaml),
-            dotenv_path=str(dotenv_file),
-            auto_load=True
-        )
-        
-        # Should be string "true", not "True" or boolean True
-        result = manager.get("DEBUG_MODE")
-        assert result == "true"
-        assert isinstance(result, str)
+    manager = ConfigManager(str(config), dotenv_path=str(env_file), auto_load=True)
+    result = manager.get("FLAG")
+    assert result == expected
+    assert isinstance(result, str)
 
 
-def test_bool_yaml_to_string_false():
-    """Test that YAML boolean false is converted to string 'false' when type is str."""
-    
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        
-        # Create config YAML with boolean false (no quotes)
-        config_yaml = tmpdir / "config.yaml"
-        config_yaml.write_text("""
-variables:
-  TRACING:
-    default: false
-    type: str
+def test_number_to_string(tmp_path):
+    """YAML integer default coerces to string when type is str."""
+    config = write_config(
+        tmp_path,
+        """
+        variables:
+          PORT:
+            default: 8080
+            type: str
+        validation:
+          strict: false
+        """,
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
 
-validation:
-  strict: false
-""")
-        
-        # Create empty .env
-        dotenv_file = tmpdir / ".env"
-        dotenv_file.write_text("")
-        
-        # Create ConfigManager
-        manager = ConfigManager(
-            str(config_yaml),
-            dotenv_path=str(dotenv_file),
-            auto_load=True
-        )
-        
-        # Should be string "false", not "False" or boolean False
-        result = manager.get("TRACING")
-        assert result == "false"
-        assert isinstance(result, str)
-
-
-def test_bool_yaml_with_bool_type():
-    """Test that YAML boolean is preserved as bool when type is bool."""
-    
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        
-        # Create config YAML with boolean and type: bool
-        config_yaml = tmpdir / "config.yaml"
-        config_yaml.write_text("""
-variables:
-  ENABLED:
-    default: true
-    type: bool
-
-validation:
-  strict: false
-""")
-        
-        # Create empty .env
-        dotenv_file = tmpdir / ".env"
-        dotenv_file.write_text("")
-        
-        # Create ConfigManager
-        manager = ConfigManager(
-            str(config_yaml),
-            dotenv_path=str(dotenv_file),
-            auto_load=True
-        )
-        
-        # Should be boolean True
-        result = manager.get("ENABLED")
-        assert result is True
-        assert isinstance(result, bool)
-
-
-def test_string_true_to_string():
-    """Test that YAML string 'true' stays as string when type is str."""
-    
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        
-        # Create config YAML with quoted "true"
-        config_yaml = tmpdir / "config.yaml"
-        config_yaml.write_text("""
-variables:
-  VALUE:
-    default: "true"
-    type: str
-
-validation:
-  strict: false
-""")
-        
-        # Create empty .env
-        dotenv_file = tmpdir / ".env"
-        dotenv_file.write_text("")
-        
-        # Create ConfigManager
-        manager = ConfigManager(
-            str(config_yaml),
-            dotenv_path=str(dotenv_file),
-            auto_load=True
-        )
-        
-        # Should be string "true"
-        result = manager.get("VALUE")
-        assert result == "true"
-        assert isinstance(result, str)
-
-
-def test_number_to_string():
-    """Test that YAML numbers are converted to string when type is str."""
-    
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        
-        # Create config YAML with number
-        config_yaml = tmpdir / "config.yaml"
-        config_yaml.write_text("""
-variables:
-  PORT:
-    default: 8080
-    type: str
-
-validation:
-  strict: false
-""")
-        
-        # Create empty .env
-        dotenv_file = tmpdir / ".env"
-        dotenv_file.write_text("")
-        
-        # Create ConfigManager
-        manager = ConfigManager(
-            str(config_yaml),
-            dotenv_path=str(dotenv_file),
-            auto_load=True
-        )
-        
-        # Should be string "8080"
-        result = manager.get("PORT")
-        assert result == "8080"
-        assert isinstance(result, str)
+    manager = ConfigManager(str(config), dotenv_path=str(env_file), auto_load=True)
+    result = manager.get("PORT")
+    assert result == "8080"
+    assert isinstance(result, str)

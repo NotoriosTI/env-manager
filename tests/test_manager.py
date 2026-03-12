@@ -11,15 +11,9 @@ from env_manager import ConfigManager, get_config, init_config, require_config
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-@pytest.fixture(autouse=True)
-def reset_singleton():
-    manager_module._SINGLETON = None  # type: ignore[attr-defined]
-    yield
-    manager_module._SINGLETON = None  # type: ignore[attr-defined]
-
 
 def _prepare_config(tmp_path: Path) -> tuple[Path, Path]:
-    config_source = FIXTURES / "test_config.yaml"
+    config_source = FIXTURES / "test_config.example.yaml"
     config_path = tmp_path / "config.yaml"
     config_path.write_text(config_source.read_text(), encoding="utf-8")
     env_path = tmp_path / ".env"
@@ -69,7 +63,7 @@ def test_missing_required_variable_raises(tmp_path):
     assert "Required variable 'DB_PASSWORD' not found" in str(exc.value)
 
 
-def test_optional_variable_warns(tmp_path, capsys):
+def test_optional_variable_with_default_is_quiet(tmp_path, capsys):
     config_path, env_path = _prepare_config(tmp_path)
     env_path.write_text("DB_PASSWORD=password123\n", encoding="utf-8")
 
@@ -80,7 +74,7 @@ def test_optional_variable_warns(tmp_path, capsys):
     )
 
     output = capsys.readouterr().out
-    assert "Optional variable DEBUG_MODE not found" in output
+    assert "Optional variable DEBUG_MODE" not in output
     assert manager.get("DEBUG_MODE") is False
 
 
@@ -95,7 +89,8 @@ def test_strict_mode_raises_on_missing(tmp_path):
             dotenv_path=str(env_path),
             strict=True,
         )
-    assert "Variable 'DB_PASSWORD' not found" in str(exc.value)
+    assert "Strict mode:" in str(exc.value)
+    assert "DB_PASSWORD" in str(exc.value)
 
 
 def test_singleton_api(tmp_path):
@@ -155,3 +150,60 @@ def test_debug_parameter_disables_masking(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "Loaded DB_PASSWORD: password123" in output
+
+
+def test_missing_active_environment_dotenv_is_deferred_until_lookup_needed(
+    tmp_path, capsys
+):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+variables:
+  DB_PASSWORD:
+    source: DB_PASSWORD
+environments:
+  default:
+    origin: local
+    dotenv_path: .env.missing
+validation:
+  required:
+    - DB_PASSWORD
+        """.strip(),
+        encoding="utf-8",
+    )
+    os.environ["DB_PASSWORD"] = "from-env"
+
+    manager = ConfigManager(str(config_path), auto_load=True)
+
+    assert manager.get("DB_PASSWORD") == "from-env"
+    output = capsys.readouterr().out
+    assert str((tmp_path / ".env.missing").resolve()) not in output
+
+
+def test_missing_active_environment_dotenv_raises_with_absolute_path_when_needed(
+    tmp_path,
+):
+    config_path = tmp_path / "config.yaml"
+    missing_path = (tmp_path / ".env.missing").resolve()
+    config_path.write_text(
+        """
+variables:
+  DB_PASSWORD:
+    source: DB_PASSWORD
+environments:
+  default:
+    origin: local
+    dotenv_path: .env.missing
+validation:
+  required:
+    - DB_PASSWORD
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        ConfigManager(str(config_path), auto_load=True)
+
+    message = str(exc.value)
+    assert "environment 'default'" in message
+    assert str(missing_path) in message
