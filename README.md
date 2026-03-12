@@ -64,6 +64,16 @@ By default, secrets are loaded from `.env` files. To use Google Cloud Secret Man
 Create a YAML file (e.g., `config_vars.yaml`) with this structure:
 
 ```yaml
+# Optional: define named environments (selected via ENVIRONMENT env var)
+environments:
+  production:
+    origin: gcp
+    gcp_project_id: my-gcp-project
+  local:
+    origin: local
+    dotenv_path: .env
+    default: true   # Used when ENVIRONMENT is not set
+
 variables:
   # Required secret (must exist in .env or GCP)
   DB_PASSWORD:
@@ -81,6 +91,13 @@ variables:
     type: str
     default: "INFO"
 
+  # Per-variable origin override
+  ANALYTICS_KEY:
+    source: ANALYTICS_KEY
+    type: str
+    origin: gcp                    # Always fetch from GCP, regardless of global setting
+    dotenv_path: secrets/.env.gcp  # Optional: custom .env path for this variable
+
 validation:
   strict: false
   required:
@@ -95,6 +112,11 @@ Each variable must have **at least one** of:
 - `source`: Name of the secret in `.env` or GCP Secret Manager
 - `default`: Fallback value if not found
 
+**Optional per-variable overrides:**
+- `origin`: `"local"` or `"gcp"` — overrides the global `secret_origin` for this variable
+- `environment`: Name of a defined environment to use as the source context for this variable
+- `dotenv_path`: Path to a custom `.env` file for this variable (relative to project root)
+
 **Type coercion** (`type` field):
 - `str` (default): No conversion
 - `int`: Converts to integer
@@ -105,6 +127,11 @@ Each variable must have **at least one** of:
 - `required`: Raises error if variable is missing
 - `optional`: Logs warning if variable is missing
 - `strict: true`: Enforces all variables must have values (ignores defaults)
+
+**Environments** (`environments` section):
+- Named environments with their own `origin`, `dotenv_path`, and/or `gcp_project_id`
+- Active environment selected via `ENVIRONMENT` env var
+- Mark one as `default: true` to use when `ENVIRONMENT` is not set
 
 ## Complete API Reference
 
@@ -325,13 +352,13 @@ port = get_config("PORT")  # Already an int, with default 8080
 
 ```bash
 # Install dependencies
-uv sync
+poetry install
 
 # Run tests
-uv run pytest -v
+pytest -v
 
 # Run with coverage
-uv run pytest --cov=env_manager --cov-report=html
+pytest --cov=env_manager --cov-report=html
 ```
 
 The project uses Python 3.13+, Poetry for dependency management, and pytest for testing.

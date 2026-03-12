@@ -1,6 +1,17 @@
 # Example configuration for env-manager
 # Copy to config_vars.yaml and customize
 
+# Optional: define named environments (selected at runtime via ENVIRONMENT env var)
+# Remove this section if you don't need multi-environment support
+environments:
+  production:
+    origin: gcp
+    gcp_project_id: my-gcp-project
+  local:
+    origin: local
+    dotenv_path: .env
+    default: true   # Used when ENVIRONMENT is not set
+
 variables:
   # Database credentials
   DB_PASSWORD:
@@ -41,6 +52,13 @@ variables:
     source: LOG_LEVEL
     type: str
     default: "INFO"
+
+  # Example: per-variable origin override (always fetched from GCP)
+  # SOME_GCP_SECRET:
+  #   source: SOME_GCP_SECRET
+  #   type: str
+  #   origin: gcp
+  #   dotenv_path: secrets/.env.gcp  # optional custom .env path
 
 validation:
   strict: false
