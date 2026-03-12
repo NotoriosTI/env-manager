@@ -154,6 +154,24 @@ manager.require("API_KEY")        # Raises RuntimeError if missing
 manager.values                    # Dict of all loaded values
 ```
 
+### Low-level Loader API (Expert)
+
+For custom integrations, the loader abstraction is also exported:
+
+```python
+from env_manager import SecretLoader, create_loader
+
+# Create a loader directly
+loader = create_loader("local", dotenv_path=".env")          # DotEnvLoader
+loader = create_loader("gcp", gcp_project_id="my-project")  # GCPSecretLoader
+
+# Fetch secrets
+values = loader.get_many(["DB_PASSWORD", "API_KEY"])
+# → {"DB_PASSWORD": "secret", "API_KEY": "key123"}
+```
+
+`create_loader` raises `ValueError` for unsupported origins (anything other than `"local"` or `"gcp"`).
+
 **Example: Multiple configurations**
 ```python
 prod_config = ConfigManager("config/prod.yaml", secret_origin="gcp")
@@ -307,16 +325,16 @@ port = get_config("PORT")  # Already an int, with default 8080
 
 ```bash
 # Install dependencies
-poetry install
+uv sync
 
 # Run tests
-pytest -v
+uv run pytest -v
 
 # Run with coverage
-pytest --cov=env_manager --cov-report=html
+uv run pytest --cov=env_manager --cov-report=html
 ```
 
-The project uses Python 3.12+, Poetry for dependency management, and pytest for testing.
+The project uses Python 3.13+, uv for dependency management, and pytest for testing.
 
 ## License
 
