@@ -188,25 +188,25 @@ class ConfigManager:
         return data
 
     def _select_environment(self) -> Optional[EnvironmentConfig]:
-        """Select the active environment based on the ENVIRONMENT env var.
+        """Select the active environment based on the APP_ENV env var.
 
-        Returns None when no environments are defined or when ENVIRONMENT is
+        Returns None when no environments are defined or when APP_ENV is
         unset and there is no ``default`` environment (deferred error).
         """
         if not self._environments:
             return None
 
-        env_name = os.environ.get("ENVIRONMENT")
+        env_name = os.environ.get("APP_ENV")
         if env_name is not None:
             if env_name not in self._environments:
                 available = sorted(self._environments.keys())
                 raise ValueError(
-                    f"Environment '{env_name}' is not defined in the config. "
+                    f"APP_ENV='{env_name}' is not defined in the config. "
                     f"Available environments: {available}"
                 )
             return self._environments[env_name]
 
-        # ENVIRONMENT not set -- fall back to "default" if it exists
+        # APP_ENV not set -- fall back to "default" if it exists
         # Explicit default: true marker takes precedence over key name
         explicit_defaults = [e for e in self._environments.values() if e.is_default]
         if explicit_defaults:
