@@ -57,3 +57,4 @@ tests/smoke/fixtures/*.yaml
 .DS_Store
 Thumbs.db
 .planning/
+.claude/
