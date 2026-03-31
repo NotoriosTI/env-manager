@@ -29,3 +29,22 @@ def test_strict_override_disables_strict(tmp_path):
     )
 
     assert manager.get("OPTIONAL") is None
+
+
+# ---------------------------------------------------------------------------
+# ENC-03: DecryptionError public export isinstance check
+# ---------------------------------------------------------------------------
+
+def test_decryption_error_isinstance_check():
+    """DecryptionError can be imported and isinstance-checked."""
+    from env_manager import DecryptionError
+    from env_manager.exceptions import DecryptionIssue
+
+    issues = [DecryptionIssue(key="SECRET", message="no key")]
+    err = DecryptionError(issues)
+
+    assert isinstance(err, DecryptionError)
+    assert isinstance(err, Exception)
+    assert len(err.issues) == 1
+    assert err.issues[0].key == "SECRET"
+    assert "SECRET" in str(err)
