@@ -42,6 +42,14 @@ def clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "OPTIONAL_TOKEN",
         "API_TOKEN",
         "PROD_LOCAL_TOKEN",
+        "DOTENV_PRIVATE_KEY",
+        "DOTENV_PRIVATE_KEY_PRODUCTION",
+        "DOTENV_PRIVATE_KEY_STAGING",
+        "DOTENV_PRIVATE_KEY_STAGING_BLUE",
+        "APP_ENV",
+        "HELLO",
+        "PLAIN",
+        "DOTENV_PUBLIC_KEY",
     ):
         monkeypatch.delenv(key, raising=False)
     yield
