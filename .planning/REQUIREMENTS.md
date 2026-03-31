@@ -21,7 +21,7 @@ Requirements for milestone `v0.2.0 / Milestone 2`. All items are new — not pre
 - [x] **ENC-03**: User receives an exported `DecryptionError` when encrypted values cannot be decrypted because the private key is missing or invalid
 - [x] **ENC-04**: User can supply decryption keys through `DOTENV_PRIVATE_KEY_<ENV>`, `DOTENV_PRIVATE_KEY`, or a colocated `.env.keys` file in that resolution order
 - [x] **ENC-05**: User can configure which secret name should be read for the private decryption key instead of being limited to `DOTENV_PRIVATE_KEY`
-- [ ] **ENC-06**: User can load the private decryption key from local dotenv-backed sources or GCP Secret Manager, not only from process environment variables or `.env.keys`
+- [x] **ENC-06**: User can load the private decryption key from local dotenv-backed sources or GCP Secret Manager, not only from process environment variables or `.env.keys`
 
 ### CLI Encryption
 
@@ -90,7 +90,7 @@ Explicitly excluded from milestone `v0.2.0 / Milestone 2`.
 | ENC-03 | Phase 02 | Complete |
 | ENC-04 | Phase 02 | Complete |
 | ENC-05 | Phase 02 | Complete |
-| ENC-06 | Phase 02 | Pending |
+| ENC-06 | Phase 02 | Complete |
 | CLI-01 | Phase 03 | Pending |
 | CLI-02 | Phase 03 | Pending |
 | CLI-03 | Phase 03 | Pending |

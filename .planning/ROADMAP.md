@@ -35,7 +35,7 @@ Python `env-manager` Milestone 2 (`v0.2.0`) brings the library to parity with th
 ## Phases
 
 - [x] **Phase 01: Validation Diagnostics** - Aggregate `load()` validation failures into one exported `ConfigValidationError` without changing existing strictness behavior. (pending) (completed 2026-03-31)
-- [ ] **Phase 02: Encrypted Dotenv Support** - Add opt-in dotenvx-compatible encrypted value decryption with explicit key resolution and error typing. (pending)
+- [x] **Phase 02: Encrypted Dotenv Support** - Add opt-in dotenvx-compatible encrypted value decryption with explicit key resolution and error typing. (pending) (completed 2026-03-31)
 - [ ] **Phase 03: CLI Encryption Script** - Add `env-manager-encrypt` console_script to encrypt dotenv files with automatic key management. (pending)
 - [ ] **Phase 04: Generic Typed Retrieval** - Add typed `get_config[T]` and `require_config[T]` overloads with optional validator-backed parsing while preserving existing callers. (pending)
 - [ ] **Phase 05: Schema-Safe Config Access** - Add `create_typed_config(schema)` for compile-time key safety on top of a validator-agnostic typed retrieval foundation. (pending)
@@ -74,7 +74,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Add failing regressions for encrypted dotenv loader behavior, manager opt-in activation, dedicated key sources, and the public decryption contract
 - [x] 02-02-PLAN.md — Add exported `DecryptionError`/types and implement dotenvx-compatible loader decryption with lazy private-key lookup
-- [ ] 02-03-PLAN.md — Wire encrypted dotenv config through environment/manager resolution and close the phase with the regression gate
+- [x] 02-03-PLAN.md — Wire encrypted dotenv config through environment/manager resolution and close the phase with the regression gate
 
 ### Phase 03: CLI Encryption Script
 **Goal**: Users can encrypt plaintext `.env` files into dotenvx-compatible encrypted format with automatic key pair generation and `.env.keys` file output.
@@ -151,7 +151,7 @@ Plans:
 
 **Goal:** Implement encrypted dotenv decryption support for non-local origins (e.g. GCP Secret Manager), adding a `NotImplementedError` guard in Phase 02 until this is ready.
 **Requirements:** TBD
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
