@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from dotenv import dotenv_values, find_dotenv
 
-from env_manager.environment import EnvironmentConfig, parse_environments
+from env_manager.environment import EncryptedDotenvConfig, EnvironmentConfig, PrivateKeyConfig, parse_environments
 from env_manager.factory import create_loader
 from env_manager.utils import coerce_type, load_yaml, logger, mask_secret
 
@@ -65,9 +65,11 @@ class ConfigManager:
         self.strict = self._resolve_strict(strict)
 
         self._loader: Optional[SecretLoader] = None
-        self._loaders: dict[tuple[str, Optional[str], Optional[str]], SecretLoader] = {}
+        self._loaders: dict[tuple[str, Optional[str], Optional[str], Optional[str]], SecretLoader] = {}
         self._values: dict[str, Any] = {}
         self._loaded = False
+        self._encrypted_enabled: bool = False
+        self._explicit_private_key: Optional[str] = None
 
         if auto_load:
             self.load()
@@ -226,13 +228,22 @@ class ConfigManager:
         return self._loader
 
     def _get_loader_for_context(self, context: SourceContext) -> SecretLoader:
-        cache_key = (context.origin, context.gcp_project_id, context.dotenv_path)
+        cache_key = (context.origin, context.gcp_project_id, context.dotenv_path, context.environment_name)
         loader = self._loaders.get(cache_key)
         if loader is None:
+            # Guard: GCP + encrypted is not supported
+            if self._encrypted_enabled and context.origin == "gcp":
+                raise NotImplementedError(
+                    "Encrypted dotenv loading from non-local origins is not yet supported. "
+                    "See Backlog 999.1."
+                )
             loader = create_loader(
                 context.origin,
                 gcp_project_id=context.gcp_project_id,
                 dotenv_path=context.dotenv_path,
+                encrypted=self._encrypted_enabled,
+                environment_name=context.environment_name,
+                explicit_private_key=self._explicit_private_key,
             )
             self._loaders[cache_key] = loader
         return loader
@@ -246,6 +257,41 @@ class ConfigManager:
             dotenv_path=self._dotenv_path,
             gcp_project_id=self.gcp_project_id,
         )
+
+    def _resolve_encrypted_dotenv_config(self) -> tuple[bool, Optional[str]]:
+        """Determine if encrypted dotenv is enabled and resolve the explicit private key.
+
+        Returns (encrypted_enabled, explicit_private_key).
+        For new-format configs: reads from active environment's encrypted_dotenv block.
+        For old-format configs: reads from top-level encrypted_dotenv block.
+        """
+        # New-format: per-environment encrypted_dotenv
+        if self._active_environment and self._active_environment.encrypted_dotenv:
+            enc_cfg = self._active_environment.encrypted_dotenv
+            if enc_cfg.enabled:
+                explicit_key = None
+                if enc_cfg.private_key:
+                    pk_cfg = enc_cfg.private_key
+                    if pk_cfg.secret_origin == "gcp":
+                        raise NotImplementedError(
+                            "Encrypted dotenv loading from non-local origins is not yet supported. "
+                            "See Backlog 999.1."
+                        )
+                    # Local key resolution: look up pk_cfg.source as env var or from dotenv file
+                    explicit_key = os.environ.get(pk_cfg.source)
+                    if explicit_key is None and pk_cfg.dotenv_path:
+                        from dotenv import dotenv_values
+                        kv = dotenv_values(pk_cfg.dotenv_path)
+                        explicit_key = kv.get(pk_cfg.source)
+                return (True, explicit_key)
+            return (False, None)
+
+        # Old-format: top-level encrypted_dotenv
+        raw_enc = self._raw_config.get("encrypted_dotenv")
+        if isinstance(raw_enc, dict) and raw_enc.get("enabled") is True:
+            return (True, None)
+
+        return (False, None)
 
     def _resolve_environment_dotenv_path(
         self, environment: EnvironmentConfig
@@ -306,6 +352,11 @@ class ConfigManager:
 
         if self._loaded:
             return
+
+        self._loaders = {}  # Reset loader cache for retry safety (Phase 01 pattern)
+        encrypted_enabled, explicit_private_key = self._resolve_encrypted_dotenv_config()
+        self._encrypted_enabled = encrypted_enabled
+        self._explicit_private_key = explicit_private_key
 
         sources = {}
         contexts: dict[str, SourceContext] = {}

@@ -143,7 +143,7 @@ class TestEnvironmentSelection:
                 calls.append(requested)
                 return {key: self._values.get(key) for key in keys}
 
-        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
             context = (origin, gcp_project_id, dotenv_path)
             if origin == "local":
                 assert dotenv_path == str((tmp_path / ".env.staging").resolve())
@@ -189,7 +189,7 @@ class TestEnvironmentSelection:
         observed: list[tuple[str, str | None, str | None]] = []
         original_create_loader = manager_module.create_loader
 
-        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
             observed.append((origin, gcp_project_id, dotenv_path))
             return original_create_loader(
                 origin,
@@ -407,7 +407,7 @@ class TestBackwardsCompatibility:
 
         loader_calls: list[tuple[str, str | None, str | None]] = []
 
-        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
             loader_calls.append((origin, gcp_project_id, dotenv_path))
             return FakeLoader()
 

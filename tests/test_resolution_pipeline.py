@@ -132,7 +132,7 @@ def test_variable_origin_override_uses_gcp_loader_while_active_environment_is_lo
             seen.append(("gcp", "app-prod", None, tuple(keys)))
             return {key: "from-gcp" for key in keys}
 
-    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
         assert origin == "gcp"
         assert gcp_project_id == "app-prod"
         assert dotenv_path is None

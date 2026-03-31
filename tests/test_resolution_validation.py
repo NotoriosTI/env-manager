@@ -394,7 +394,7 @@ def test_gcp_origin_with_dotenv_path_ignores_dotenv(tmp_path, monkeypatch):
         def get_many(self, keys):
             return {key: "gcp-value" for key in keys}
 
-    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
         loader_calls.append((origin, gcp_project_id, dotenv_path))
         return FakeLoader()
 
