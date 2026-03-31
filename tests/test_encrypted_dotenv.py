@@ -81,8 +81,12 @@ class TestDecryptionErrors:
         """No key available -> DecryptionError with issue per failed variable."""
         for k in ("DOTENV_PRIVATE_KEY", "DOTENV_PRIVATE_KEY_PRODUCTION"):
             monkeypatch.delenv(k, raising=False)
+        # Copy encrypted file to tmp_path (no .env.keys present) so no key can be found
+        import shutil
+        env_file = tmp_path / ".env.encrypted"
+        shutil.copy(FIXTURES / ".env.encrypted", env_file)
         loader = DotEnvLoader(
-            dotenv_path=str(FIXTURES / ".env.encrypted"),
+            dotenv_path=str(env_file),
             encrypted=True,
         )
         with pytest.raises(DecryptionError) as exc_info:
@@ -106,8 +110,12 @@ class TestDecryptionErrors:
         """get_many collects all failures into one DecryptionError."""
         for k in ("DOTENV_PRIVATE_KEY", "DOTENV_PRIVATE_KEY_PRODUCTION"):
             monkeypatch.delenv(k, raising=False)
+        # Copy encrypted file to tmp_path (no .env.keys present) so no key can be found
+        import shutil
+        env_file = tmp_path / ".env.encrypted"
+        shutil.copy(FIXTURES / ".env.encrypted", env_file)
         loader = DotEnvLoader(
-            dotenv_path=str(FIXTURES / ".env.encrypted"),
+            dotenv_path=str(env_file),
             encrypted=True,
         )
         with pytest.raises(DecryptionError) as exc_info:
