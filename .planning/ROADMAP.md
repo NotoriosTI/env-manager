@@ -87,10 +87,10 @@ Plans:
   4. The command refuses to overwrite an existing `.env.keys` file unless `--force` is passed.
   5. Encrypted output round-trips through `DotEnvLoader` with `encrypted: true` and the matching private key.
   6. CLI entry point is registered as `env-manager-encrypt` in `pyproject.toml [project.scripts]`.
-**Plans**: TBD (2 plans estimated)
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Implement core encryption module with TDD tests for key generation, value encryption, round-trip verification, and edge cases
+- [x] 03-01-PLAN.md — Implement core encryption module with TDD tests for key generation, value encryption, round-trip verification, and edge cases
 - [ ] 03-02-PLAN.md — Wire CLI entry point with argparse, pyproject.toml script registration, and package install verification
 
 ### Phase 04: Generic Typed Retrieval
@@ -151,7 +151,7 @@ Plans:
 
 **Goal:** Implement encrypted dotenv decryption support for non-local origins (e.g. GCP Secret Manager), adding a `NotImplementedError` guard in Phase 02 until this is ready.
 **Requirements:** TBD
-**Plans:** 3/3 plans complete
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)

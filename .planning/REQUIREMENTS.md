@@ -25,13 +25,13 @@ Requirements for milestone `v0.2.0 / Milestone 2`. All items are new — not pre
 
 ### CLI Encryption
 
-- [ ] **CLI-01**: `encrypt` command generates a secp256k1 key pair and writes `DOTENV_PUBLIC_KEY` to the target `.env` file
-- [ ] **CLI-02**: `encrypt` command rewrites each plaintext value as `encrypted:<base64>` and the ciphertext decrypts back to the original value
-- [ ] **CLI-03**: `encrypt` command writes the private key to a colocated `.env.keys` file in dotenvx format
-- [ ] **CLI-04**: `encrypt` command skips values already prefixed with `encrypted:`
-- [ ] **CLI-05**: `encrypt` command skips the `DOTENV_PUBLIC_KEY` variable itself (never encrypts the public key)
-- [ ] **CLI-06**: `encrypt` command refuses when a `.env.keys` file already exists unless `--force` is passed
-- [ ] **CLI-07**: Encrypted output round-trips through `DotEnvLoader` with `encrypted: true` and the matching private key
+- [x] **CLI-01**: `encrypt` command generates a secp256k1 key pair and writes `DOTENV_PUBLIC_KEY` to the target `.env` file
+- [x] **CLI-02**: `encrypt` command rewrites each plaintext value as `encrypted:<base64>` and the ciphertext decrypts back to the original value
+- [x] **CLI-03**: `encrypt` command writes the private key to a colocated `.env.keys` file in dotenvx format
+- [x] **CLI-04**: `encrypt` command skips values already prefixed with `encrypted:`
+- [x] **CLI-05**: `encrypt` command skips the `DOTENV_PUBLIC_KEY` variable itself (never encrypts the public key)
+- [x] **CLI-06**: `encrypt` command refuses when a `.env.keys` file already exists unless `--force` is passed
+- [x] **CLI-07**: Encrypted output round-trips through `DotEnvLoader` with `encrypted: true` and the matching private key
 - [ ] **CLI-08**: User can invoke the encrypt command via `python -m env_manager.cli.encrypt <file>` or a registered `env-manager-encrypt` console_script
 - [ ] **CLI-09**: The CLI entry point is registered in `pyproject.toml` `[project.scripts]` and included in the package
 
@@ -91,13 +91,13 @@ Explicitly excluded from milestone `v0.2.0 / Milestone 2`.
 | ENC-04 | Phase 02 | Complete |
 | ENC-05 | Phase 02 | Complete |
 | ENC-06 | Phase 02 | Complete |
-| CLI-01 | Phase 03 | Pending |
-| CLI-02 | Phase 03 | Pending |
-| CLI-03 | Phase 03 | Pending |
-| CLI-04 | Phase 03 | Pending |
-| CLI-05 | Phase 03 | Pending |
-| CLI-06 | Phase 03 | Pending |
-| CLI-07 | Phase 03 | Pending |
+| CLI-01 | Phase 03 | Complete |
+| CLI-02 | Phase 03 | Complete |
+| CLI-03 | Phase 03 | Complete |
+| CLI-04 | Phase 03 | Complete |
+| CLI-05 | Phase 03 | Complete |
+| CLI-06 | Phase 03 | Complete |
+| CLI-07 | Phase 03 | Complete |
 | CLI-08 | Phase 03 | Pending |
 | CLI-09 | Phase 03 | Pending |
 | TYPE-01 | Phase 04 | Pending |
