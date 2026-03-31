@@ -604,3 +604,102 @@ class TestSingletonWithEnvironments:
         )
 
         assert isinstance(mgr, ConfigManager)
+
+
+# ===========================================================================
+# Phase 02: Encrypted dotenv per-environment configuration
+# ===========================================================================
+
+
+class TestEncryptedDotenvConfig:
+    """Per-environment encrypted_dotenv configuration parsing."""
+
+    YAML_ENCRYPTED = """\
+    environments:
+      staging:
+        origin: local
+        dotenv_path: .env.staging
+        default: true
+        encrypted_dotenv:
+          enabled: true
+          private_key:
+            source: MY_CUSTOM_KEY
+            secret_origin: local
+            dotenv_path: .env.staging.keys
+      production:
+        origin: local
+        dotenv_path: .env.production
+    variables:
+      API_KEY:
+        source: API_KEY
+    """
+
+    def test_encrypted_env_has_config(self, tmp_path, monkeypatch):
+        """Staging env has encrypted_dotenv.enabled = True."""
+        from env_manager.environment import parse_environments
+        from env_manager.utils import load_yaml
+        config_path = write_config(tmp_path, self.YAML_ENCRYPTED)
+        raw = load_yaml(str(config_path))
+        envs = parse_environments(raw)
+        staging = envs["staging"]
+        assert staging.encrypted_dotenv is not None
+        assert staging.encrypted_dotenv.enabled is True
+        assert staging.encrypted_dotenv.private_key is not None
+        assert staging.encrypted_dotenv.private_key.source == "MY_CUSTOM_KEY"
+        assert staging.encrypted_dotenv.private_key.secret_origin == "local"
+        assert staging.encrypted_dotenv.private_key.dotenv_path == ".env.staging.keys"
+
+    def test_plaintext_env_has_no_config(self, tmp_path, monkeypatch):
+        """Production env has encrypted_dotenv = None."""
+        from env_manager.environment import parse_environments
+        from env_manager.utils import load_yaml
+        config_path = write_config(tmp_path, self.YAML_ENCRYPTED)
+        raw = load_yaml(str(config_path))
+        envs = parse_environments(raw)
+        production = envs["production"]
+        assert production.encrypted_dotenv is None
+
+    def test_encrypted_disabled_treated_as_none(self, tmp_path):
+        """encrypted_dotenv with enabled: false treated as None."""
+        from env_manager.environment import parse_environments
+        from env_manager.utils import load_yaml
+        yaml_text = """\
+        environments:
+          dev:
+            origin: local
+            dotenv_path: .env.dev
+            default: true
+            encrypted_dotenv:
+              enabled: false
+        variables:
+          X:
+            source: X
+        """
+        config_path = write_config(tmp_path, yaml_text)
+        raw = load_yaml(str(config_path))
+        envs = parse_environments(raw)
+        assert envs["dev"].encrypted_dotenv is None
+
+    def test_invalid_secret_origin_defaults_to_local(self, tmp_path):
+        """Unknown secret_origin defaults to 'local'."""
+        from env_manager.environment import parse_environments
+        from env_manager.utils import load_yaml
+        yaml_text = """\
+        environments:
+          dev:
+            origin: local
+            dotenv_path: .env
+            default: true
+            encrypted_dotenv:
+              enabled: true
+              private_key:
+                source: KEY
+                secret_origin: aws
+        variables:
+          X:
+            source: X
+        """
+        config_path = write_config(tmp_path, yaml_text)
+        raw = load_yaml(str(config_path))
+        envs = parse_environments(raw)
+        assert envs["dev"].encrypted_dotenv.private_key.secret_origin == "local"
