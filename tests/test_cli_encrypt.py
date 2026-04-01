@@ -187,3 +187,51 @@ class TestRoundTrip:
             explicit_private_key=priv_hex,
         )
         assert loader.get("PLAIN") == "hello"
+
+
+import subprocess
+
+
+class TestCLIEntryPoint:
+    """CLI-08 + CLI-09: CLI is invocable via module and registered script."""
+
+    def test_module_invocation_help(self):
+        result = subprocess.run(
+            ["uv", "run", "python", "-m", "env_manager.cli.encrypt", "--help"],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0
+        assert "env-manager-encrypt" in result.stdout
+
+    def test_script_invocation_help(self):
+        result = subprocess.run(
+            ["uv", "run", "env-manager-encrypt", "--help"],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0
+        assert "--force" in result.stdout
+
+    def test_cli_encrypts_file(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("MY_SECRET=hello\n")
+        result = subprocess.run(
+            ["uv", "run", "env-manager-encrypt", str(env_file)],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0
+        assert "Encrypted" in result.stdout
+        # Verify file was actually encrypted
+        values = dotenv_values(str(env_file))
+        assert "DOTENV_PUBLIC_KEY" in values
+        assert values["MY_SECRET"].startswith("encrypted:")
+
+    def test_cli_error_on_existing_keys(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("X=1\n")
+        (tmp_path / ".env.keys").write_text("old=data\n")
+        result = subprocess.run(
+            ["uv", "run", "env-manager-encrypt", str(env_file)],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 1
+        assert "already exists" in result.stderr
