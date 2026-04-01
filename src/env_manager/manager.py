@@ -90,10 +90,15 @@ class ConfigManager:
 
     def _discover_project_root(self) -> Path:
         current = self._config_path.parent
+        git_root: Optional[Path] = None
         for candidate in (current, *current.parents):
             if (candidate / "pyproject.toml").exists():
                 return candidate
-        return self._config_path.parent
+            # Record the innermost git root we cross
+            if git_root is None and (candidate / ".git").exists():
+                git_root = candidate
+                break  # Don't climb past git boundaries
+        return git_root if git_root is not None else self._config_path.parent
 
     def _resolve_project_path(self, raw_path: str) -> str:
         candidate = Path(raw_path).expanduser()
@@ -281,7 +286,8 @@ class ConfigManager:
                     explicit_key = os.environ.get(pk_cfg.source)
                     if explicit_key is None and pk_cfg.dotenv_path:
                         from dotenv import dotenv_values
-                        kv = dotenv_values(pk_cfg.dotenv_path)
+                        resolved_pk_path = self._resolve_project_path(pk_cfg.dotenv_path)
+                        kv = dotenv_values(resolved_pk_path)
                         explicit_key = kv.get(pk_cfg.source)
                 return (True, explicit_key)
             return (False, None)
