@@ -200,7 +200,7 @@ def test_missing_explicit_per_variable_dotenv_raises_only_when_lookup_needs_file
 ):
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.delenv("API_KEY", raising=False)
 
     config_path = write_repo_config(
@@ -236,7 +236,7 @@ def test_missing_explicit_per_variable_dotenv_is_bypassed_by_os_environ(
 ):
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.setenv("API_KEY", "from-os")
 
     config_path = write_repo_config(
@@ -270,7 +270,7 @@ def test_missing_explicit_per_variable_dotenv_is_bypassed_by_os_environ(
 
 def test_empty_dotenv_path_override_raises_value_error(tmp_path, monkeypatch):
     """dotenv_path: '' (empty string) raises ValueError with variable name and 'dotenv_path'."""
-    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
     config_path = write_config(
         tmp_path,
         """
@@ -290,7 +290,7 @@ def test_empty_dotenv_path_override_raises_value_error(tmp_path, monkeypatch):
 
 def test_non_string_source_raises_value_error(tmp_path, monkeypatch):
     """source: 123 (non-string integer) raises ValueError with variable name and 'source'."""
-    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
     config_path = write_config(
         tmp_path,
         """
@@ -309,7 +309,7 @@ def test_non_string_source_raises_value_error(tmp_path, monkeypatch):
 
 def test_empty_environment_override_raises_value_error(tmp_path, monkeypatch):
     """environment: '' (empty string) raises ValueError with variable name and 'environment'."""
-    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
     config_path = write_config(
         tmp_path,
         """
@@ -329,7 +329,7 @@ def test_empty_environment_override_raises_value_error(tmp_path, monkeypatch):
 
 def test_variables_section_as_list_raises_value_error(tmp_path, monkeypatch):
     """variables: [...] (list instead of dict) raises ValueError with 'variables' and 'mapping'."""
-    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
     config_path = write_config(
         tmp_path,
         """
@@ -348,7 +348,7 @@ def test_variables_section_as_list_raises_value_error(tmp_path, monkeypatch):
 
 def test_validation_section_as_string_raises_value_error(tmp_path, monkeypatch):
     """validation: 'strict' (string instead of dict) raises ValueError with 'validation' and 'mapping'."""
-    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
     config_path = write_config(
         tmp_path,
         """
@@ -369,7 +369,7 @@ def test_validation_section_as_string_raises_value_error(tmp_path, monkeypatch):
 
 def test_gcp_origin_with_dotenv_path_ignores_dotenv(tmp_path, monkeypatch):
     """origin: gcp + dotenv_path override: gcp loader gets dotenv_path from the override (re-applied after gcp clears it)."""
-    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.setenv("GCP_PROJECT_ID", "test-project")
 
     config_path = write_config(
@@ -394,7 +394,7 @@ def test_gcp_origin_with_dotenv_path_ignores_dotenv(tmp_path, monkeypatch):
         def get_many(self, keys):
             return {key: "gcp-value" for key in keys}
 
-    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
         loader_calls.append((origin, gcp_project_id, dotenv_path))
         return FakeLoader()
 

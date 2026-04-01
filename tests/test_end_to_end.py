@@ -97,7 +97,7 @@ def test_production_like_flow(prod_config: Path):
 def test_mixed_sources_load_in_one_eager_pass(tmp_path: Path, monkeypatch):
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.delenv("DEFAULT_TOKEN", raising=False)
     monkeypatch.delenv("OVERRIDE_TOKEN", raising=False)
     monkeypatch.delenv("PINNED_SECRET", raising=False)
@@ -153,21 +153,21 @@ validation:
 
     calls: list[tuple[str, str | None, str | None, tuple[str, ...]]] = []
 
-    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None):
         calls.append((origin, gcp_project_id, dotenv_path, tuple()))
         if origin == "gcp":
             return FakeLoader({"projects/prod-123/secrets/GCP_SECRET": "from-gcp"})
-        return manager_module.create_loader(origin, gcp_project_id=gcp_project_id, dotenv_path=dotenv_path)
+        return manager_module.create_loader(origin, gcp_project_id=gcp_project_id, dotenv_path=dotenv_path, encrypted=encrypted, environment_name=environment_name, explicit_private_key=explicit_private_key)
 
     original_create_loader = manager_module.create_loader
 
-    def recording_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+    def recording_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None):
         if origin == "gcp":
             calls.append((origin, gcp_project_id, dotenv_path, ("projects/prod-123/secrets/GCP_SECRET",)))
             return FakeLoader({"projects/prod-123/secrets/GCP_SECRET": "from-gcp"})
         calls.append((origin, gcp_project_id, dotenv_path, tuple()))
         return original_create_loader(
-            origin, gcp_project_id=gcp_project_id, dotenv_path=dotenv_path
+            origin, gcp_project_id=gcp_project_id, dotenv_path=dotenv_path, encrypted=encrypted, environment_name=environment_name, explicit_private_key=explicit_private_key
         )
 
     monkeypatch.setattr(manager_module, "create_loader", recording_create_loader)

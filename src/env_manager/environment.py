@@ -9,6 +9,24 @@ _VALID_ORIGINS = {"local", "gcp"}
 
 
 @dataclass
+class PrivateKeyConfig:
+    """Configuration for how to resolve the private decryption key."""
+
+    source: str                              # secret name to look up (e.g. "MY_CUSTOM_KEY")
+    secret_origin: str = "local"             # 'local' or 'gcp'
+    dotenv_path: Optional[str] = None        # for local: path to .env file containing the key
+    gcp_project_id: Optional[str] = None     # for gcp: project ID
+
+
+@dataclass
+class EncryptedDotenvConfig:
+    """Configuration for encrypted dotenv handling."""
+
+    enabled: bool
+    private_key: Optional[PrivateKeyConfig] = None
+
+
+@dataclass
 class EnvironmentConfig:
     """Parsed configuration for a single named environment."""
 
@@ -17,6 +35,7 @@ class EnvironmentConfig:
     dotenv_path: Optional[str] = None
     gcp_project_id: Optional[str] = None
     is_default: bool = False
+    encrypted_dotenv: Optional[EncryptedDotenvConfig] = None  # Phase 02 addition
 
 
 def parse_environments(
@@ -94,12 +113,33 @@ def parse_environments(
 
         is_default = bool(env_data.get("default", False))
 
+        # -- encrypted_dotenv (optional) --------------------------------------
+        encrypted_dotenv: Optional[EncryptedDotenvConfig] = None
+        raw_encrypted = env_data.get("encrypted_dotenv")
+        if isinstance(raw_encrypted, dict) and raw_encrypted.get("enabled") is True:
+            raw_pk = raw_encrypted.get("private_key")
+            private_key_cfg: Optional[PrivateKeyConfig] = None
+            if isinstance(raw_pk, dict):
+                pk_source = raw_pk.get("source")
+                if isinstance(pk_source, str) and pk_source.strip():
+                    key_origin = raw_pk.get("secret_origin", "local")
+                    if key_origin not in ("local", "gcp"):
+                        key_origin = "local"
+                    private_key_cfg = PrivateKeyConfig(
+                        source=pk_source,
+                        secret_origin=key_origin,
+                        dotenv_path=raw_pk.get("dotenv_path"),
+                        gcp_project_id=raw_pk.get("gcp_project_id"),
+                    )
+            encrypted_dotenv = EncryptedDotenvConfig(enabled=True, private_key=private_key_cfg)
+
         result[env_name] = EnvironmentConfig(
             name=env_name,
             origin=origin,
             dotenv_path=dotenv_path,
             gcp_project_id=gcp_project_id,
             is_default=is_default,
+            encrypted_dotenv=encrypted_dotenv,
         )
 
     explicit_defaults = [name for name, cfg in result.items() if cfg.is_default]

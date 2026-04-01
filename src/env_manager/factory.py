@@ -21,6 +21,9 @@ def create_loader(
     *,
     gcp_project_id: Optional[str] = None,
     dotenv_path: Optional[str] = None,
+    encrypted: bool = False,
+    environment_name: Optional[str] = None,
+    explicit_private_key: Optional[str] = None,
 ) -> SecretLoader:
     """Instantiate the appropriate loader for ``secret_origin``."""
 
@@ -28,7 +31,12 @@ def create_loader(
 
     if origin == "local":
         logger.info("Loading secrets from .env")
-        return DotEnvLoader(dotenv_path=dotenv_path)
+        return DotEnvLoader(
+            dotenv_path=dotenv_path,
+            encrypted=encrypted,
+            environment_name=environment_name,
+            explicit_private_key=explicit_private_key,
+        )
 
     if origin == "gcp":
         if not gcp_project_id:

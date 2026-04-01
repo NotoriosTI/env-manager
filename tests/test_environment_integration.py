@@ -38,7 +38,7 @@ class TestEnvironmentSelection:
 
     def test_environment_var_selects_staging(self, tmp_path, monkeypatch):
         """ENVIRONMENT=staging selects staging config."""
-        monkeypatch.setenv("ENVIRONMENT", "staging")
+        monkeypatch.setenv("APP_ENV", "staging")
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
         staging_env = tmp_path / ".env.staging"
         staging_env.write_text("DB_PASSWORD=staging_secret\n", encoding="utf-8")
@@ -52,7 +52,7 @@ class TestEnvironmentSelection:
 
     def test_environment_unset_falls_back_to_default(self, tmp_path, monkeypatch):
         """Omitting ENVIRONMENT falls back to default environment."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
         write_env(tmp_path)
 
@@ -63,7 +63,7 @@ class TestEnvironmentSelection:
 
     def test_undefined_environment_raises_value_error(self, tmp_path, monkeypatch):
         """ENVIRONMENT=unknown raises ValueError with descriptive message."""
-        monkeypatch.setenv("ENVIRONMENT", "unknown")
+        monkeypatch.setenv("APP_ENV", "unknown")
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
 
         with pytest.raises(ValueError, match="unknown"):
@@ -71,7 +71,7 @@ class TestEnvironmentSelection:
 
     def test_undefined_environment_error_lists_available(self, tmp_path, monkeypatch):
         """Error message lists available environment names."""
-        monkeypatch.setenv("ENVIRONMENT", "typo")
+        monkeypatch.setenv("APP_ENV", "typo")
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
 
         with pytest.raises(ValueError) as exc_info:
@@ -84,7 +84,7 @@ class TestEnvironmentSelection:
 
     def test_environment_origin_used_for_secret_origin(self, tmp_path, monkeypatch):
         """Active environment's origin is used as secret_origin."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         monkeypatch.delenv("SECRET_ORIGIN", raising=False)
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
         write_env(tmp_path)
@@ -95,7 +95,7 @@ class TestEnvironmentSelection:
 
     def test_environment_gcp_project_id_used(self, tmp_path, monkeypatch):
         """Active environment's gcp_project_id is propagated."""
-        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv("APP_ENV", "production")
         monkeypatch.delenv("GCP_PROJECT_ID", raising=False)
         # Change cwd so find_dotenv doesn't discover the project's real .env
         monkeypatch.chdir(tmp_path)
@@ -108,7 +108,7 @@ class TestEnvironmentSelection:
     def test_variable_environment_uses_pinned_environment_context(
         self, tmp_path, monkeypatch
     ):
-        monkeypatch.setenv("ENVIRONMENT", "staging")
+        monkeypatch.setenv("APP_ENV", "staging")
         monkeypatch.chdir(tmp_path)
         config_path = write_config(
             tmp_path,
@@ -143,7 +143,7 @@ class TestEnvironmentSelection:
                 calls.append(requested)
                 return {key: self._values.get(key) for key in keys}
 
-        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
             context = (origin, gcp_project_id, dotenv_path)
             if origin == "local":
                 assert dotenv_path == str((tmp_path / ".env.staging").resolve())
@@ -163,7 +163,7 @@ class TestEnvironmentSelection:
     def test_variable_origin_override_replaces_only_origin_on_pinned_environment(
         self, tmp_path, monkeypatch
     ):
-        monkeypatch.setenv("ENVIRONMENT", "staging")
+        monkeypatch.setenv("APP_ENV", "staging")
         monkeypatch.chdir(tmp_path)
         config_path = write_config(
             tmp_path,
@@ -189,7 +189,7 @@ class TestEnvironmentSelection:
         observed: list[tuple[str, str | None, str | None]] = []
         original_create_loader = manager_module.create_loader
 
-        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
             observed.append((origin, gcp_project_id, dotenv_path))
             return original_create_loader(
                 origin,
@@ -211,7 +211,7 @@ class TestEnvironmentSelection:
     def test_variable_override_validation_rejects_unknown_environment(
         self, tmp_path, monkeypatch
     ):
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         monkeypatch.setenv("API_TOKEN", "from-os")
         config_path = write_config(
             tmp_path,
@@ -242,7 +242,7 @@ class TestEnvironmentSelection:
     def test_variable_override_validation_rejects_invalid_origin(
         self, tmp_path, monkeypatch
     ):
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         config_path = write_config(
             tmp_path,
             """
@@ -276,7 +276,7 @@ class TestNoDefaultEnvironment:
 
     def test_no_default_no_env_var_returns_none(self, tmp_path, monkeypatch):
         """No immediate crash -- active_environment is None (deferred error)."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         config_path = write_config(tmp_path, self.YAML_NO_DEFAULT)
 
         mgr = ConfigManager(str(config_path), auto_load=False)
@@ -310,7 +310,7 @@ class TestBackwardsCompatibility:
 
     def test_old_format_active_environment_is_none(self, tmp_path, monkeypatch):
         """Old format: active_environment is None."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         config_path = write_config(tmp_path, self.YAML_OLD_FORMAT)
         write_env(tmp_path)
 
@@ -407,7 +407,7 @@ class TestBackwardsCompatibility:
 
         loader_calls: list[tuple[str, str | None, str | None]] = []
 
-        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+        def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
             loader_calls.append((origin, gcp_project_id, dotenv_path))
             return FakeLoader()
 
@@ -424,7 +424,7 @@ class TestBackwardsCompatibility:
         self, tmp_path, monkeypatch
     ):
         """Old format: per-variable environment override raises ValueError (no environments dict)."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         config_path = write_config(
             tmp_path,
             """
@@ -469,7 +469,7 @@ class TestBackwardsCompatibility:
         self, tmp_path, monkeypatch
     ):
         """Old format: ENVIRONMENT env var is ignored when no environments dict exists."""
-        monkeypatch.setenv("ENVIRONMENT", "staging")
+        monkeypatch.setenv("APP_ENV", "staging")
         config_path = write_config(
             tmp_path,
             """
@@ -505,7 +505,7 @@ class TestParamOverrides:
 
     def test_secret_origin_param_overrides_env_config(self, tmp_path, monkeypatch):
         """secret_origin param wins over active environment's origin."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         monkeypatch.delenv("SECRET_ORIGIN", raising=False)
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
         env_path = write_env(tmp_path)
@@ -519,7 +519,7 @@ class TestParamOverrides:
 
     def test_gcp_project_id_param_overrides_env_config(self, tmp_path, monkeypatch):
         """gcp_project_id param wins over active environment's gcp_project_id."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         monkeypatch.delenv("GCP_PROJECT_ID", raising=False)
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
 
@@ -532,7 +532,7 @@ class TestParamOverrides:
 
     def test_dotenv_path_param_overrides_env_config(self, tmp_path, monkeypatch):
         """dotenv_path param wins over active environment's dotenv_path."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         yaml_local = """\
         environments:
           default:
@@ -577,7 +577,7 @@ class TestSingletonWithEnvironments:
 
     def test_init_config_with_environments(self, tmp_path, monkeypatch):
         """init_config works with new-format YAML."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
         env_path = write_env(tmp_path)
 
@@ -588,7 +588,7 @@ class TestSingletonWithEnvironments:
 
     def test_init_config_signatures_unchanged(self, tmp_path, monkeypatch):
         """init_config accepts all original kwargs."""
-        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
         env_path = write_env(tmp_path)
 
@@ -604,3 +604,102 @@ class TestSingletonWithEnvironments:
         )
 
         assert isinstance(mgr, ConfigManager)
+
+
+# ===========================================================================
+# Phase 02: Encrypted dotenv per-environment configuration
+# ===========================================================================
+
+
+class TestEncryptedDotenvConfig:
+    """Per-environment encrypted_dotenv configuration parsing."""
+
+    YAML_ENCRYPTED = """\
+    environments:
+      staging:
+        origin: local
+        dotenv_path: .env.staging
+        default: true
+        encrypted_dotenv:
+          enabled: true
+          private_key:
+            source: MY_CUSTOM_KEY
+            secret_origin: local
+            dotenv_path: .env.staging.keys
+      production:
+        origin: local
+        dotenv_path: .env.production
+    variables:
+      API_KEY:
+        source: API_KEY
+    """
+
+    def test_encrypted_env_has_config(self, tmp_path, monkeypatch):
+        """Staging env has encrypted_dotenv.enabled = True."""
+        from env_manager.environment import parse_environments
+        from env_manager.utils import load_yaml
+        config_path = write_config(tmp_path, self.YAML_ENCRYPTED)
+        raw = load_yaml(str(config_path))
+        envs = parse_environments(raw)
+        staging = envs["staging"]
+        assert staging.encrypted_dotenv is not None
+        assert staging.encrypted_dotenv.enabled is True
+        assert staging.encrypted_dotenv.private_key is not None
+        assert staging.encrypted_dotenv.private_key.source == "MY_CUSTOM_KEY"
+        assert staging.encrypted_dotenv.private_key.secret_origin == "local"
+        assert staging.encrypted_dotenv.private_key.dotenv_path == ".env.staging.keys"
+
+    def test_plaintext_env_has_no_config(self, tmp_path, monkeypatch):
+        """Production env has encrypted_dotenv = None."""
+        from env_manager.environment import parse_environments
+        from env_manager.utils import load_yaml
+        config_path = write_config(tmp_path, self.YAML_ENCRYPTED)
+        raw = load_yaml(str(config_path))
+        envs = parse_environments(raw)
+        production = envs["production"]
+        assert production.encrypted_dotenv is None
+
+    def test_encrypted_disabled_treated_as_none(self, tmp_path):
+        """encrypted_dotenv with enabled: false treated as None."""
+        from env_manager.environment import parse_environments
+        from env_manager.utils import load_yaml
+        yaml_text = """\
+        environments:
+          dev:
+            origin: local
+            dotenv_path: .env.dev
+            default: true
+            encrypted_dotenv:
+              enabled: false
+        variables:
+          X:
+            source: X
+        """
+        config_path = write_config(tmp_path, yaml_text)
+        raw = load_yaml(str(config_path))
+        envs = parse_environments(raw)
+        assert envs["dev"].encrypted_dotenv is None
+
+    def test_invalid_secret_origin_defaults_to_local(self, tmp_path):
+        """Unknown secret_origin defaults to 'local'."""
+        from env_manager.environment import parse_environments
+        from env_manager.utils import load_yaml
+        yaml_text = """\
+        environments:
+          dev:
+            origin: local
+            dotenv_path: .env
+            default: true
+            encrypted_dotenv:
+              enabled: true
+              private_key:
+                source: KEY
+                secret_origin: aws
+        variables:
+          X:
+            source: X
+        """
+        config_path = write_config(tmp_path, yaml_text)
+        raw = load_yaml(str(config_path))
+        envs = parse_environments(raw)
+        assert envs["dev"].encrypted_dotenv.private_key.secret_origin == "local"

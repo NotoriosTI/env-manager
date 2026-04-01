@@ -12,7 +12,7 @@ from conftest import write_config, write_repo_config
 def test_sourced_value_prefers_os_environ_over_active_environment_dotenv(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.setenv("API_KEY", "from-os")
 
     config_path = write_config(
@@ -44,7 +44,7 @@ def test_sourced_value_prefers_os_environ_over_active_environment_dotenv(
 def test_sourced_value_uses_active_environment_dotenv_when_os_environ_missing(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.delenv("API_KEY", raising=False)
 
     config_path = write_config(
@@ -74,7 +74,7 @@ def test_sourced_value_uses_active_environment_dotenv_when_os_environ_missing(
 def test_sourced_value_falls_back_to_yaml_default_after_os_environ_and_dotenv(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.delenv("PORT", raising=False)
 
     config_path = write_config(
@@ -106,7 +106,7 @@ def test_sourced_value_falls_back_to_yaml_default_after_os_environ_and_dotenv(
 def test_variable_origin_override_uses_gcp_loader_while_active_environment_is_local(
     tmp_path, monkeypatch
 ):
-    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("API_KEY", raising=False)
 
     config_path = write_config(
@@ -132,7 +132,7 @@ def test_variable_origin_override_uses_gcp_loader_while_active_environment_is_lo
             seen.append(("gcp", "app-prod", None, tuple(keys)))
             return {key: "from-gcp" for key in keys}
 
-    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None):
+    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, **kwargs):
         assert origin == "gcp"
         assert gcp_project_id == "app-prod"
         assert dotenv_path is None
@@ -148,7 +148,7 @@ def test_variable_origin_override_uses_gcp_loader_while_active_environment_is_lo
 
 
 def test_os_environ_beats_pinned_environment_lookup(tmp_path, monkeypatch):
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.setenv("API_KEY", "from-os")
 
     config_path = write_config(
@@ -179,7 +179,7 @@ def test_os_environ_beats_pinned_environment_lookup(tmp_path, monkeypatch):
 def test_variables_without_overrides_keep_active_environment_behavior(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.delenv("SHARED_TOKEN", raising=False)
     monkeypatch.delenv("OVERRIDDEN_TOKEN", raising=False)
 
@@ -222,7 +222,7 @@ def test_variable_dotenv_path_override_uses_project_root_relative_path(
 ):
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.delenv("API_KEY", raising=False)
 
     config_path = write_repo_config(
@@ -255,7 +255,7 @@ def test_variable_dotenv_path_override_uses_project_root_relative_path(
 def test_pinned_environment_without_other_overrides_uses_environment_defaults(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.delenv("API_KEY", raising=False)
 
     config_path = write_config(
@@ -289,7 +289,7 @@ def test_origin_local_with_dotenv_path_is_independent_of_active_environment(
 ):
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
-    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.setenv("APP_ENV", "prod")
     monkeypatch.delenv("LOCAL_ONLY_TOKEN", raising=False)
 
     config_path = write_repo_config(
@@ -322,7 +322,7 @@ def test_variable_dotenv_path_override_with_absolute_path(tmp_path, monkeypatch)
     """A variable dotenv_path set to an absolute path loads from that exact file."""
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
-    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.delenv("API_KEY", raising=False)
 
     # Create an external directory outside the repo with a separate .env file
