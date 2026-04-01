@@ -128,3 +128,40 @@ def encrypt_dotenv_file(
     keys_content = KEYS_HEADER
     keys_content += f'{key_var}="{priv_hex}"\n'
     keys_path.write_text(keys_content)
+
+
+def main() -> None:
+    """CLI entry point for env-manager-encrypt."""
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        prog="env-manager-encrypt",
+        description="Encrypt a .env file using dotenvx-compatible ECIES encryption.",
+    )
+    parser.add_argument("file", help="Path to the .env file to encrypt")
+    parser.add_argument(
+        "--env",
+        default=None,
+        help="Environment name (writes DOTENV_PRIVATE_KEY_<NAME> in .env.keys)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing .env.keys file",
+    )
+    args = parser.parse_args()
+
+    try:
+        encrypt_dotenv_file(args.file, env_name=args.env, force=args.force)
+    except (FileNotFoundError, FileExistsError, ValueError, ImportError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Encrypted {args.file}")
+    keys_path = Path(args.file).parent / ".env.keys"
+    print(f"Private key written to {keys_path}")
+
+
+if __name__ == "__main__":
+    main()

@@ -18,6 +18,9 @@ dependencies = [
 [project.optional-dependencies]
 encrypted = ["eciespy>=0.4.6,<0.5.0"]
 
+[project.scripts]
+env-manager-encrypt = "env_manager.cli.encrypt:main"
+
 [tool.poetry]
 packages = [{ include = "env_manager", from = "src" }]
 
