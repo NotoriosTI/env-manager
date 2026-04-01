@@ -32,8 +32,8 @@ Requirements for milestone `v0.2.0 / Milestone 2`. All items are new — not pre
 - [x] **CLI-05**: `encrypt` command skips the `DOTENV_PUBLIC_KEY` variable itself (never encrypts the public key)
 - [x] **CLI-06**: `encrypt` command refuses when a `.env.keys` file already exists unless `--force` is passed
 - [x] **CLI-07**: Encrypted output round-trips through `DotEnvLoader` with `encrypted: true` and the matching private key
-- [ ] **CLI-08**: User can invoke the encrypt command via `python -m env_manager.cli.encrypt <file>` or a registered `env-manager-encrypt` console_script
-- [ ] **CLI-09**: The CLI entry point is registered in `pyproject.toml` `[project.scripts]` and included in the package
+- [x] **CLI-08**: User can invoke the encrypt command via `python -m env_manager.cli.encrypt <file>` or a registered `env-manager-encrypt` console_script
+- [x] **CLI-09**: The CLI entry point is registered in `pyproject.toml` `[project.scripts]` and included in the package
 
 ### Typed Access
 
@@ -98,8 +98,8 @@ Explicitly excluded from milestone `v0.2.0 / Milestone 2`.
 | CLI-05 | Phase 03 | Complete |
 | CLI-06 | Phase 03 | Complete |
 | CLI-07 | Phase 03 | Complete |
-| CLI-08 | Phase 03 | Pending |
-| CLI-09 | Phase 03 | Pending |
+| CLI-08 | Phase 03 | Complete |
+| CLI-09 | Phase 03 | Complete |
 | TYPE-01 | Phase 04 | Pending |
 | TYPE-02 | Phase 04 | Pending |
 | TYPE-03 | Phase 05 | Pending |

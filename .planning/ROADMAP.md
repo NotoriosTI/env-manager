@@ -36,7 +36,7 @@ Python `env-manager` Milestone 2 (`v0.2.0`) brings the library to parity with th
 
 - [x] **Phase 01: Validation Diagnostics** - Aggregate `load()` validation failures into one exported `ConfigValidationError` without changing existing strictness behavior. (pending) (completed 2026-03-31)
 - [x] **Phase 02: Encrypted Dotenv Support** - Add opt-in dotenvx-compatible encrypted value decryption with explicit key resolution and error typing. (pending) (completed 2026-03-31)
-- [ ] **Phase 03: CLI Encryption Script** - Add `env-manager-encrypt` console_script to encrypt dotenv files with automatic key management. (pending)
+- [x] **Phase 03: CLI Encryption Script** - Add `env-manager-encrypt` console_script to encrypt dotenv files with automatic key management. (pending) (completed 2026-04-01)
 - [ ] **Phase 04: Generic Typed Retrieval** - Add typed `get_config[T]` and `require_config[T]` overloads with optional validator-backed parsing while preserving existing callers. (pending)
 - [ ] **Phase 05: Schema-Safe Config Access** - Add `create_typed_config(schema)` for compile-time key safety on top of a validator-agnostic typed retrieval foundation. (pending)
 - [ ] **Phase 06: Runtime Ergonomics** - Add injectable logger support and opt-in dotenv expansion without changing defaults for existing consumers. (pending)
@@ -91,7 +91,7 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md — Implement core encryption module with TDD tests for key generation, value encryption, round-trip verification, and edge cases
-- [ ] 03-02-PLAN.md — Wire CLI entry point with argparse, pyproject.toml script registration, and package install verification
+- [x] 03-02-PLAN.md — Wire CLI entry point with argparse, pyproject.toml script registration, and package install verification
 
 ### Phase 04: Generic Typed Retrieval
 **Goal**: Consumers can opt into typed config reads and validator-backed retrieval without breaking existing untyped access patterns.
@@ -151,7 +151,7 @@ Plans:
 
 **Goal:** Implement encrypted dotenv decryption support for non-local origins (e.g. GCP Secret Manager), adding a `NotImplementedError` guard in Phase 02 until this is ready.
 **Requirements:** TBD
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
