@@ -363,6 +363,10 @@ pytest --cov=env_manager --cov-report=html
 
 The project uses Python 3.13+, Poetry for dependency management, and pytest for testing.
 
+## Related Projects
+
+Looking for a TypeScript/Node.js version? Check out **[env-manager-js](https://github.com/NotoriosTI/env-manager-js)** — a TypeScript implementation with full feature parity. Both projects share the same YAML config format, secret resolution logic, and API design, so you can use whichever fits your stack.
+
 ## License
 
 Copyright (c) 2025 NotoriosTI. All rights reserved.
