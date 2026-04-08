@@ -466,7 +466,8 @@ Setup complete! Would you like to:
 
   1. Add more variables interactively
   2. Audit config vs .env (report missing or extra keys)
-  3. Done
+  3. Run security verification
+  4. Done
 ```
 
 **Option 1 — Add variables:**
@@ -492,6 +493,95 @@ Compare and report:
 - Keys in `.env` but missing from `config.yaml` → "Not tracked in config"
 - Keys in `config.yaml` but missing from `.env` → "Missing from .env"
 - Keys in both → OK
+
+**Option 3 — Security verification:** Jump to Phase 8.
+
+---
+
+## Phase 8 — Security Verification
+
+Run automatically after setup completes, and available as option 3 in Phase 7.
+
+This phase verifies that the security posture is correct based on how each environment was configured. It reads `config.yaml` to determine environment types if `$ENVIRONMENTS` is not already in scope.
+
+### Step 8.1 — Parse environment types from config.yaml
+
+```bash
+cat config.yaml
+```
+
+For each environment block, note:
+- `origin: local` with `encrypted_dotenv.enabled: true` → type: `local_encrypted`
+- `origin: local` without `encrypted_dotenv` → type: `local_plain`
+- `origin: gcp` → type: `gcp` (no .env file to check)
+
+Also read the `dotenv_path` for each `local` or `local_encrypted` environment (default: `.env`).
+
+### Step 8.2 — Check each .env file
+
+For each environment with type `local_plain` (plain, unencrypted .env):
+
+**Must NOT be git-tracked:**
+```bash
+git ls-files <dotenv_path>
+```
+- Empty output → PASS
+- Non-empty output → FAIL: "`.env` is tracked by git — plaintext secrets will be committed"
+
+**Must be gitignored:**
+```bash
+git check-ignore -v <dotenv_path>
+```
+- Non-empty output → PASS
+- Empty output (not ignored) → FAIL: "`.env` is not in `.gitignore`"
+
+For each environment with type `local_encrypted`:
+
+**Must contain `DOTENV_PUBLIC_KEY` (confirms encryption was applied):**
+```bash
+grep -q "^DOTENV_PUBLIC_KEY=" <dotenv_path> && echo "encrypted" || echo "plaintext"
+```
+- `encrypted` → PASS (file has been encrypted; safe to commit)
+- `plaintext` → FAIL: "`.env` is configured as encrypted but contains plaintext values — run `env-manager-encrypt <dotenv_path>` first"
+
+### Step 8.3 — Check .env.keys
+
+```bash
+git ls-files .env.keys
+```
+- Empty output → PASS
+- Non-empty → FAIL: "`.env.keys` is tracked by git — private keys will be exposed"
+
+```bash
+git check-ignore -v .env.keys
+```
+- Non-empty → PASS
+- Empty → FAIL: "`.env.keys` is not in `.gitignore`"
+
+### Step 8.4 — Report
+
+Display a summary table:
+
+```
+Security Verification
+─────────────────────────────────────────────
+.env.keys                  [PASS] not tracked, gitignored
+.env          (local)      [PASS] not tracked, gitignored
+.env.staging  (encrypted)  [PASS] DOTENV_PUBLIC_KEY present
+.env          (encrypted)  [FAIL] plaintext values found — run env-manager-encrypt .env
+```
+
+For each FAIL, show the exact fix command.
+
+If all checks pass:
+```
+All security checks passed. Your secrets are protected.
+```
+
+If any FAIL:
+```
+[N] issue(s) found. Fix them before committing.
+```
 
 ---
 
