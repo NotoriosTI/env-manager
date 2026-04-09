@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
+from rich.console import Console
+from rich.logging import RichHandler
 
 __all__ = [
     "PrettyLogger",
@@ -15,25 +18,26 @@ __all__ = [
     "load_yaml",
 ]
 
-try:
-    from dev_utils.pretty_logger import PrettyLogger
-except ImportError:  # pragma: no cover - fallback for local testing without dependency
-    import logging
-
-    class PrettyLogger(logging.Logger):
-        """Fallback logger resembling PrettyLogger interface."""
-
-        def __init__(self, name: str) -> None:
-            super().__init__(name)
-            if not self.handlers:
-                handler = logging.StreamHandler()
-                handler.setFormatter(
-                    logging.Formatter("%(levelname)s: %(message)s")
-                )
-                self.addHandler(handler)
+PrettyLogger = logging.getLoggerClass()
+logger = logging.getLogger("env-manager")
 
 
-logger = PrettyLogger("env-manager")
+def _configure_logging() -> None:
+    """Configure logging with rich handler if not already configured."""
+    root = logging.getLogger()
+    if not root.handlers:
+        root.addHandler(
+            RichHandler(
+                console=Console(stderr=True),
+                rich_tracebacks=True,
+                show_time=False,
+                show_path=False,
+            )
+        )
+        root.setLevel(logging.INFO)
+
+
+_configure_logging()
 
 
 SUPPORTED_TYPES = {"str", "int", "float", "bool"}
@@ -99,9 +103,7 @@ def load_yaml(path: str) -> dict[str, Any]:
 
     config_path = Path(path)
     if not config_path.exists():
-        raise FileNotFoundError(
-            f"Configuration file '{config_path}' does not exist."
-        )
+        raise FileNotFoundError(f"Configuration file '{config_path}' does not exist.")
 
     with config_path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}

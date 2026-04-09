@@ -39,6 +39,7 @@ ENV/
 htmlcov/
 
 uv.lock
+poetry.lock
 
 # Secrets (never commit!)
 .env

@@ -13,13 +13,7 @@ from dotenv import dotenv_values, find_dotenv
 from env_manager.base import SecretLoader
 from env_manager.exceptions import DecryptionError, DecryptionIssue
 
-try:
-    from dev_utils.pretty_logger import PrettyLogger
-except ImportError:  # pragma: no cover
-    from env_manager.utils import PrettyLogger
-
-
-logger = PrettyLogger("env-manager")
+from env_manager.utils import logger
 
 ENCRYPTED_PREFIX = "encrypted:"
 
@@ -72,7 +66,7 @@ class DotEnvLoader(SecretLoader):
 
         # 1. Environment-specific key (only when environment_name is set)
         if self._environment_name:
-            suffix = re.sub(r'[^A-Z0-9]+', '_', self._environment_name.upper())
+            suffix = re.sub(r"[^A-Z0-9]+", "_", self._environment_name.upper())
             env_key = f"DOTENV_PRIVATE_KEY_{suffix}"
             if env_key in os.environ:
                 return os.environ[env_key]
@@ -107,7 +101,7 @@ class DotEnvLoader(SecretLoader):
         if not private_key:
             return {"error": f"No private key found to decrypt '{key}'", "value": None}
 
-        cipher_b64 = raw_value[len(ENCRYPTED_PREFIX):]
+        cipher_b64 = raw_value[len(ENCRYPTED_PREFIX) :]
         try:
             from ecies import decrypt as ecies_decrypt
         except ImportError:
@@ -138,7 +132,9 @@ class DotEnvLoader(SecretLoader):
         if self._encrypted_enabled and raw.startswith(ENCRYPTED_PREFIX):
             result = self._decrypt_value(key, raw)
             if result["error"]:
-                raise DecryptionError([DecryptionIssue(key=key, message=result["error"])])
+                raise DecryptionError(
+                    [DecryptionIssue(key=key, message=result["error"])]
+                )
             return result["value"]
 
         return raw
