@@ -38,7 +38,7 @@ def test_default_only_variables_resolve_from_yaml_without_loader(
 
     assert manager.get("LOG_LEVEL") == "INFO"
     assert manager.get("DEBUG_MODE") is False
-    assert "Loaded LOG_LEVEL" in capsys.readouterr().out
+    assert "Loaded LOG_LEVEL" in capsys.readouterr().err
 
 
 def test_default_only_variable_ignores_same_named_os_environ(tmp_path, monkeypatch):
@@ -133,7 +133,9 @@ def test_mixed_config_fetches_only_sourced_variables(tmp_path, monkeypatch):
             requested_keys.extend(keys)
             return {"API_TOKEN": "top-secret"}
 
-    monkeypatch.setattr(manager_module, "create_loader", lambda *args, **kwargs: FakeLoader())
+    monkeypatch.setattr(
+        manager_module, "create_loader", lambda *args, **kwargs: FakeLoader()
+    )
 
     manager = ConfigManager(str(config_path), auto_load=True)
 

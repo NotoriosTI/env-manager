@@ -36,7 +36,7 @@ def test_required_sourced_variable_missing_raises_runtime_error_with_context(
     assert "Required variable 'API_KEY' not found" in message
     assert "environment 'default'" in message
     assert str((tmp_path / ".env.runtime").resolve()) in message
-    assert "API_KEY" in capsys.readouterr().out
+    assert "API_KEY" in capsys.readouterr().err
 
 
 def test_required_sourced_variable_uses_yaml_default_and_warns(tmp_path, capsys):
@@ -63,8 +63,10 @@ def test_required_sourced_variable_uses_yaml_default_and_warns(tmp_path, capsys)
     )
 
     assert manager.get("API_KEY") == "fallback-key"
-    output = capsys.readouterr().out
-    assert "Required variable 'API_KEY' missing from source; using YAML default" in output
+    output = capsys.readouterr().err
+    assert (
+        "Required variable 'API_KEY' missing from source; using YAML default" in output
+    )
     assert "environment 'default'" in output
 
 
@@ -93,7 +95,7 @@ def test_optional_sourced_variable_without_default_resolves_none_and_warns(
     )
 
     assert manager.get("OPTIONAL_TOKEN") is None
-    output = capsys.readouterr().out
+    output = capsys.readouterr().err
     assert "Optional variable 'OPTIONAL_TOKEN' resolved to None" in output
     assert "environment 'default'" in output
 
@@ -190,8 +192,8 @@ def test_gcp_runtime_context_is_included_in_missing_value_messages(
     )
 
     assert manager.get("API_TOKEN") is None
-    output = capsys.readouterr().out
-    assert "environment 'default'" in output
+    output = capsys.readouterr().err
+    assert "environment" in output and "'default'" in output
     assert "GCP project 'app-prod'" in output
 
 
@@ -220,7 +222,9 @@ def test_missing_explicit_per_variable_dotenv_raises_only_when_lookup_needs_file
         """,
     )
     (repo_root / "env").mkdir()
-    (repo_root / "env" / ".env.staging").write_text("API_KEY=from-staging\n", encoding="utf-8")
+    (repo_root / "env" / ".env.staging").write_text(
+        "API_KEY=from-staging\n", encoding="utf-8"
+    )
 
     with pytest.raises(RuntimeError) as exc:
         ConfigManager(str(config_path), auto_load=True)
@@ -256,7 +260,9 @@ def test_missing_explicit_per_variable_dotenv_is_bypassed_by_os_environ(
         """,
     )
     (repo_root / "env").mkdir()
-    (repo_root / "env" / ".env.staging").write_text("API_KEY=from-staging\n", encoding="utf-8")
+    (repo_root / "env" / ".env.staging").write_text(
+        "API_KEY=from-staging\n", encoding="utf-8"
+    )
 
     manager = ConfigManager(str(config_path), auto_load=True)
 

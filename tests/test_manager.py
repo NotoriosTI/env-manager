@@ -9,8 +9,14 @@ import env_manager.manager as manager_module
 from env_manager import ConfigManager, get_config, init_config, require_config
 from conftest import write_config
 
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
+try:
+    import ecies  # noqa: F401
 
+    ECIES_AVAILABLE = True
+except ImportError:
+    ECIES_AVAILABLE = False
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def _prepare_config(tmp_path: Path) -> tuple[Path, Path]:
@@ -124,7 +130,7 @@ def test_reinit_logs_warning(tmp_path, capsys):
         dotenv_path=str(env_path),
     )
 
-    output = capsys.readouterr().out
+    output = capsys.readouterr().err
     assert "Configuration manager already initialised" in output
 
 
@@ -149,7 +155,7 @@ def test_debug_parameter_disables_masking(tmp_path, capsys):
         debug=True,
     )
 
-    output = capsys.readouterr().out
+    output = capsys.readouterr().err
     assert "Loaded DB_PASSWORD: password123" in output
 
 
@@ -214,6 +220,7 @@ validation:
 # ENC-06: NotImplementedError for GCP + encrypted combination
 # ---------------------------------------------------------------------------
 
+
 def test_gcp_encrypted_raises_not_implemented(tmp_path, monkeypatch):
     """GCP origin + encrypted_dotenv raises NotImplementedError."""
     yaml_text = """\
@@ -238,6 +245,7 @@ def test_gcp_encrypted_raises_not_implemented(tmp_path, monkeypatch):
 # ENC-01: old-format encrypted_dotenv top-level block
 # ---------------------------------------------------------------------------
 
+
 def test_old_format_encrypted_dotenv_top_level(tmp_path, monkeypatch):
     """Old-format config with top-level encrypted_dotenv.enabled works."""
     env_file = tmp_path / ".env"
@@ -260,9 +268,12 @@ def test_old_format_encrypted_dotenv_top_level(tmp_path, monkeypatch):
 # ENC-05: custom private key source name
 # ---------------------------------------------------------------------------
 
+
+@pytest.mark.skipif(not ECIES_AVAILABLE, reason="eciespy not installed")
 def test_custom_private_key_source_used(tmp_path, monkeypatch):
     """Custom private_key.source name is resolved from environment."""
     import shutil
+
     fixtures = Path(__file__).resolve().parent / "fixtures"
     env_src = fixtures / ".env.encrypted"
     shutil.copy(env_src, tmp_path / ".env.staging")
@@ -283,7 +294,10 @@ def test_custom_private_key_source_used(tmp_path, monkeypatch):
     """
     config_path = write_config(tmp_path, yaml_text)
     monkeypatch.setenv("APP_ENV", "staging")
-    monkeypatch.setenv("MY_DECRYPT_KEY", "81dac4d2c42e67a2c6542d3b943a4674a05c4be5e7e5a40a689be7a3bd49a07e")
+    monkeypatch.setenv(
+        "MY_DECRYPT_KEY",
+        "81dac4d2c42e67a2c6542d3b943a4674a05c4be5e7e5a40a689be7a3bd49a07e",
+    )
     monkeypatch.chdir(tmp_path)
     cm = ConfigManager(str(config_path), auto_load=True)
     assert cm.get("HELLO") == "world"
@@ -293,12 +307,15 @@ def test_custom_private_key_source_used(tmp_path, monkeypatch):
 # ENC-04: shared dotenv_path with different environment_name gets separate loaders
 # ---------------------------------------------------------------------------
 
+
+@pytest.mark.skipif(not ECIES_AVAILABLE, reason="eciespy not installed")
 def test_shared_dotenv_path_different_env_name_separate_loaders(tmp_path, monkeypatch):
     """Two environments sharing a dotenv_path but different environment_name
     must produce separate loaders so the correct DOTENV_PRIVATE_KEY_<ENV>
     suffix is tried for each. Regression test for cache_key omitting
     environment_name."""
     import shutil
+
     fixtures = Path(__file__).resolve().parent / "fixtures"
     env_src = fixtures / ".env.encrypted"
     # Both environments point to the same dotenv file
