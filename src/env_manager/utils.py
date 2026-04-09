@@ -2,38 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 __all__ = [
-    "PrettyLogger",
     "logger",
     "mask_secret",
     "coerce_type",
     "load_yaml",
 ]
 
-try:
-    from dev_utils.pretty_logger import PrettyLogger
-except ImportError:  # pragma: no cover - fallback for local testing without dependency
-    import logging
-
-    class PrettyLogger(logging.Logger):
-        """Fallback logger resembling PrettyLogger interface."""
-
-        def __init__(self, name: str) -> None:
-            super().__init__(name)
-            if not self.handlers:
-                handler = logging.StreamHandler()
-                handler.setFormatter(
-                    logging.Formatter("%(levelname)s: %(message)s")
-                )
-                self.addHandler(handler)
-
-
-logger = PrettyLogger("env-manager")
+PrettyLogger = logging.getLoggerClass()  # backward-compat alias; not re-exported
+logger = logging.getLogger("env-manager")
+logger.addHandler(logging.NullHandler())
 
 
 SUPPORTED_TYPES = {"str", "int", "float", "bool"}
@@ -99,9 +83,7 @@ def load_yaml(path: str) -> dict[str, Any]:
 
     config_path = Path(path)
     if not config_path.exists():
-        raise FileNotFoundError(
-            f"Configuration file '{config_path}' does not exist."
-        )
+        raise FileNotFoundError(f"Configuration file '{config_path}' does not exist.")
 
     with config_path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}

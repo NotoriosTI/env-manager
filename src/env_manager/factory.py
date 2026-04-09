@@ -7,13 +7,7 @@ from typing import Optional
 from env_manager.base import SecretLoader
 from env_manager.loaders import DotEnvLoader, GCPSecretLoader
 
-try:
-    from dev_utils.pretty_logger import PrettyLogger
-except ImportError:  # pragma: no cover
-    from env_manager.utils import PrettyLogger
-
-
-logger = PrettyLogger("env-manager")
+from env_manager.utils import logger
 
 
 def create_loader(

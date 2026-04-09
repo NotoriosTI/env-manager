@@ -9,13 +9,7 @@ from google.cloud import secretmanager
 
 from env_manager.base import SecretLoader
 
-try:
-    from dev_utils.pretty_logger import PrettyLogger
-except ImportError:  # pragma: no cover
-    from env_manager.utils import PrettyLogger
-
-
-logger = PrettyLogger("env-manager")
+from env_manager.utils import logger
 
 
 class GCPSecretLoader(SecretLoader):

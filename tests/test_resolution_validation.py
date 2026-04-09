@@ -10,8 +10,10 @@ from conftest import write_config, write_env, write_repo_config
 
 
 def test_required_sourced_variable_missing_raises_runtime_error_with_context(
-    tmp_path, capsys
+    tmp_path, caplog
 ):
+    import logging
+
     config_path = write_config(
         tmp_path,
         """
@@ -29,17 +31,20 @@ def test_required_sourced_variable_missing_raises_runtime_error_with_context(
     )
     (tmp_path / ".env.runtime").write_text("", encoding="utf-8")
 
-    with pytest.raises(RuntimeError) as exc:
-        ConfigManager(str(config_path), auto_load=True)
+    with caplog.at_level(logging.INFO, logger="env-manager"):
+        with pytest.raises(RuntimeError) as exc:
+            ConfigManager(str(config_path), auto_load=True)
 
     message = str(exc.value)
     assert "Required variable 'API_KEY' not found" in message
     assert "environment 'default'" in message
     assert str((tmp_path / ".env.runtime").resolve()) in message
-    assert "API_KEY" in capsys.readouterr().out
+    assert "API_KEY" in caplog.text
 
 
-def test_required_sourced_variable_uses_yaml_default_and_warns(tmp_path, capsys):
+def test_required_sourced_variable_uses_yaml_default_and_warns(tmp_path, caplog):
+    import logging
+
     config_path = write_config(
         tmp_path,
         """
@@ -55,22 +60,24 @@ def test_required_sourced_variable_uses_yaml_default_and_warns(tmp_path, capsys)
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
 
-    manager = ConfigManager(
-        str(config_path),
-        secret_origin="local",
-        dotenv_path=str(env_file),
-        auto_load=True,
-    )
+    with caplog.at_level(logging.INFO, logger="env-manager"):
+        manager = ConfigManager(
+            str(config_path),
+            secret_origin="local",
+            dotenv_path=str(env_file),
+            auto_load=True,
+        )
 
     assert manager.get("API_KEY") == "fallback-key"
-    output = capsys.readouterr().out
-    assert "Required variable 'API_KEY' missing from source; using YAML default" in output
-    assert "environment 'default'" in output
+    assert "Required variable 'API_KEY' missing from source; using YAML default" in caplog.text
+    assert "environment 'default'" in caplog.text
 
 
 def test_optional_sourced_variable_without_default_resolves_none_and_warns(
-    tmp_path, capsys
+    tmp_path, caplog
 ):
+    import logging
+
     config_path = write_config(
         tmp_path,
         """
@@ -85,20 +92,22 @@ def test_optional_sourced_variable_without_default_resolves_none_and_warns(
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
 
-    manager = ConfigManager(
-        str(config_path),
-        secret_origin="local",
-        dotenv_path=str(env_file),
-        auto_load=True,
-    )
+    with caplog.at_level(logging.INFO, logger="env-manager"):
+        manager = ConfigManager(
+            str(config_path),
+            secret_origin="local",
+            dotenv_path=str(env_file),
+            auto_load=True,
+        )
 
     assert manager.get("OPTIONAL_TOKEN") is None
-    output = capsys.readouterr().out
-    assert "Optional variable 'OPTIONAL_TOKEN' resolved to None" in output
-    assert "environment 'default'" in output
+    assert "Optional variable 'OPTIONAL_TOKEN' resolved to None" in caplog.text
+    assert "environment 'default'" in caplog.text
 
 
-def test_optional_sourced_variable_with_yaml_default_is_quiet(tmp_path, capsys):
+def test_optional_sourced_variable_with_yaml_default_is_quiet(tmp_path, caplog):
+    import logging
+
     config_path = write_config(
         tmp_path,
         """
@@ -114,16 +123,16 @@ def test_optional_sourced_variable_with_yaml_default_is_quiet(tmp_path, capsys):
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
 
-    manager = ConfigManager(
-        str(config_path),
-        secret_origin="local",
-        dotenv_path=str(env_file),
-        auto_load=True,
-    )
+    with caplog.at_level(logging.INFO, logger="env-manager"):
+        manager = ConfigManager(
+            str(config_path),
+            secret_origin="local",
+            dotenv_path=str(env_file),
+            auto_load=True,
+        )
 
     assert manager.get("OPTIONAL_TOKEN") == "quiet-default"
-    output = capsys.readouterr().out
-    assert "Optional variable 'OPTIONAL_TOKEN'" not in output
+    assert "Optional variable 'OPTIONAL_TOKEN'" not in caplog.text
 
 
 def test_strict_mode_raises_before_optional_fallback(tmp_path):
@@ -155,8 +164,10 @@ def test_strict_mode_raises_before_optional_fallback(tmp_path):
 
 
 def test_gcp_runtime_context_is_included_in_missing_value_messages(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, caplog
 ):
+    import logging
+
     config_path = write_config(
         tmp_path,
         """
@@ -183,16 +194,16 @@ def test_gcp_runtime_context_is_included_in_missing_value_messages(
         lambda *args, **kwargs: FakeLoader(),
     )
 
-    manager = ConfigManager(
-        str(config_path),
-        gcp_project_id="app-prod",
-        auto_load=True,
-    )
+    with caplog.at_level(logging.INFO, logger="env-manager"):
+        manager = ConfigManager(
+            str(config_path),
+            gcp_project_id="app-prod",
+            auto_load=True,
+        )
 
     assert manager.get("API_TOKEN") is None
-    output = capsys.readouterr().out
-    assert "environment 'default'" in output
-    assert "GCP project 'app-prod'" in output
+    assert "environment" in caplog.text and "'default'" in caplog.text
+    assert "GCP project 'app-prod'" in caplog.text
 
 
 def test_missing_explicit_per_variable_dotenv_raises_only_when_lookup_needs_file(
@@ -220,7 +231,9 @@ def test_missing_explicit_per_variable_dotenv_raises_only_when_lookup_needs_file
         """,
     )
     (repo_root / "env").mkdir()
-    (repo_root / "env" / ".env.staging").write_text("API_KEY=from-staging\n", encoding="utf-8")
+    (repo_root / "env" / ".env.staging").write_text(
+        "API_KEY=from-staging\n", encoding="utf-8"
+    )
 
     with pytest.raises(RuntimeError) as exc:
         ConfigManager(str(config_path), auto_load=True)
@@ -256,7 +269,9 @@ def test_missing_explicit_per_variable_dotenv_is_bypassed_by_os_environ(
         """,
     )
     (repo_root / "env").mkdir()
-    (repo_root / "env" / ".env.staging").write_text("API_KEY=from-staging\n", encoding="utf-8")
+    (repo_root / "env" / ".env.staging").write_text(
+        "API_KEY=from-staging\n", encoding="utf-8"
+    )
 
     manager = ConfigManager(str(config_path), auto_load=True)
 

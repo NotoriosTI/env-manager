@@ -37,13 +37,13 @@ def test_gcp_loader_fetches_and_caches(mocker):
     client_mock.access_secret_version.assert_called_once()
 
 
-def test_gcp_loader_handles_missing_secret(mocker, capsys):
+def test_gcp_loader_handles_missing_secret(mocker, caplog):
+    import logging
+
     client_mock = mocker.Mock()
     from google.api_core import exceptions as gcp_exceptions
 
-    client_mock.access_secret_version.side_effect = gcp_exceptions.NotFound(
-        "missing"
-    )
+    client_mock.access_secret_version.side_effect = gcp_exceptions.NotFound("missing")
     mocker.patch(
         "env_manager.loaders.gcp.secretmanager.SecretManagerServiceClient",
         return_value=client_mock,
@@ -51,6 +51,7 @@ def test_gcp_loader_handles_missing_secret(mocker, capsys):
 
     loader = GCPSecretLoader(project_id="project-123")
 
-    assert loader.get("MISSING") is None
-    captured = capsys.readouterr().out
-    assert "Secret 'MISSING' not found in GCP project 'project-123'." in captured
+    with caplog.at_level(logging.WARNING, logger="env-manager"):
+        assert loader.get("MISSING") is None
+
+    assert "Secret 'MISSING' not found in GCP project 'project-123'." in caplog.text
