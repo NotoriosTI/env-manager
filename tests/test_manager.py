@@ -70,18 +70,20 @@ def test_missing_required_variable_raises(tmp_path):
     assert "Required variable 'DB_PASSWORD' not found" in str(exc.value)
 
 
-def test_optional_variable_with_default_is_quiet(tmp_path, capsys):
+def test_optional_variable_with_default_is_quiet(tmp_path, caplog):
+    import logging
+
     config_path, env_path = _prepare_config(tmp_path)
     env_path.write_text("DB_PASSWORD=password123\n", encoding="utf-8")
 
-    manager = ConfigManager(
-        str(config_path),
-        secret_origin="local",
-        dotenv_path=str(env_path),
-    )
+    with caplog.at_level(logging.INFO, logger="env-manager"):
+        manager = ConfigManager(
+            str(config_path),
+            secret_origin="local",
+            dotenv_path=str(env_path),
+        )
 
-    output = capsys.readouterr().out
-    assert "Optional variable DEBUG_MODE" not in output
+    assert "Optional variable DEBUG_MODE" not in caplog.text
     assert manager.get("DEBUG_MODE") is False
 
 
@@ -114,7 +116,9 @@ def test_singleton_api(tmp_path):
     assert require_config("DEBUG_MODE") is False
 
 
-def test_reinit_logs_warning(tmp_path, capsys):
+def test_reinit_logs_warning(tmp_path, caplog):
+    import logging
+
     config_path, env_path = _prepare_config(tmp_path)
     env_path.write_text("DB_PASSWORD=password123\n", encoding="utf-8")
 
@@ -123,18 +127,20 @@ def test_reinit_logs_warning(tmp_path, capsys):
         secret_origin="local",
         dotenv_path=str(env_path),
     )
-    capsys.readouterr()
-    init_config(
-        str(config_path),
-        secret_origin="local",
-        dotenv_path=str(env_path),
-    )
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="env-manager"):
+        init_config(
+            str(config_path),
+            secret_origin="local",
+            dotenv_path=str(env_path),
+        )
 
-    output = capsys.readouterr().err
-    assert "Configuration manager already initialised" in output
+    assert "Configuration manager already initialised" in caplog.text
 
 
-def test_debug_parameter_disables_masking(tmp_path, capsys):
+def test_debug_parameter_disables_masking(tmp_path, caplog):
+    import logging
+
     config_path, env_path = _prepare_config(tmp_path)
     env_path.write_text(
         "\n".join(
@@ -148,20 +154,22 @@ def test_debug_parameter_disables_masking(tmp_path, capsys):
         encoding="utf-8",
     )
 
-    ConfigManager(
-        str(config_path),
-        secret_origin="local",
-        dotenv_path=str(env_path),
-        debug=True,
-    )
+    with caplog.at_level(logging.DEBUG, logger="env-manager"):
+        ConfigManager(
+            str(config_path),
+            secret_origin="local",
+            dotenv_path=str(env_path),
+            debug=True,
+        )
 
-    output = capsys.readouterr().err
-    assert "Loaded DB_PASSWORD: password123" in output
+    assert "Loaded DB_PASSWORD: password123" in caplog.text
 
 
 def test_missing_active_environment_dotenv_is_deferred_until_lookup_needed(
-    tmp_path, capsys
+    tmp_path, caplog
 ):
+    import logging
+
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         """
@@ -180,11 +188,11 @@ validation:
     )
     os.environ["DB_PASSWORD"] = "from-env"
 
-    manager = ConfigManager(str(config_path), auto_load=True)
+    with caplog.at_level(logging.INFO, logger="env-manager"):
+        manager = ConfigManager(str(config_path), auto_load=True)
 
     assert manager.get("DB_PASSWORD") == "from-env"
-    output = capsys.readouterr().out
-    assert str((tmp_path / ".env.missing").resolve()) not in output
+    assert str((tmp_path / ".env.missing").resolve()) not in caplog.text
 
 
 def test_missing_active_environment_dotenv_raises_with_absolute_path_when_needed(

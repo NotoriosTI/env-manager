@@ -7,37 +7,17 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from rich.console import Console
-from rich.logging import RichHandler
 
 __all__ = [
-    "PrettyLogger",
     "logger",
     "mask_secret",
     "coerce_type",
     "load_yaml",
 ]
 
-PrettyLogger = logging.getLoggerClass()
+PrettyLogger = logging.getLoggerClass()  # backward-compat alias; not re-exported
 logger = logging.getLogger("env-manager")
-
-
-def _configure_logging() -> None:
-    """Configure logging with rich handler if not already configured."""
-    root = logging.getLogger()
-    if not root.handlers:
-        root.addHandler(
-            RichHandler(
-                console=Console(stderr=True),
-                rich_tracebacks=True,
-                show_time=False,
-                show_path=False,
-            )
-        )
-        root.setLevel(logging.INFO)
-
-
-_configure_logging()
+logger.addHandler(logging.NullHandler())
 
 
 SUPPORTED_TYPES = {"str", "int", "float", "bool"}

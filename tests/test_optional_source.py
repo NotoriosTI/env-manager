@@ -10,8 +10,10 @@ from conftest import write_config
 
 
 def test_default_only_variables_resolve_from_yaml_without_loader(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, caplog
 ):
+    import logging
+
     monkeypatch.setenv("LOG_LEVEL", "TRACE")
 
     config_path = write_config(
@@ -34,11 +36,12 @@ def test_default_only_variables_resolve_from_yaml_without_loader(
 
     monkeypatch.setattr(manager_module, "create_loader", fail_create_loader)
 
-    manager = ConfigManager(str(config_path), auto_load=True)
+    with caplog.at_level(logging.INFO, logger="env-manager"):
+        manager = ConfigManager(str(config_path), auto_load=True)
 
     assert manager.get("LOG_LEVEL") == "INFO"
     assert manager.get("DEBUG_MODE") is False
-    assert "Loaded LOG_LEVEL" in capsys.readouterr().err
+    assert "Loaded LOG_LEVEL" in caplog.text
 
 
 def test_default_only_variable_ignores_same_named_os_environ(tmp_path, monkeypatch):
