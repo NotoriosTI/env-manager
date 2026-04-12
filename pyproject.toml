@@ -1,6 +1,6 @@
 [project]
 name = "notoriosti-env-manager"
-version = "0.2.2"
+version = "0.2.3"
 description = "Environment-aware configuration loader with GCP Secret Manager support"
 authors = [{ name = "Bastian Ibañez", email = "bastian.miba@gmail.com" }]
 readme = "README.md"
