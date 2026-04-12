@@ -1,70 +1,48 @@
 # env-manager
 
-A simple, environment-aware configuration manager that unifies secrets from local `.env` files and Google Cloud Secret Manager. It handles type coercion, validation, secret masking, and automatically loads variables to `os.environ` so external libraries work seamlessly.
+A Python 3.13+ configuration manager that unifies secrets from local `.env` files and Google Cloud Secret Manager. Handles type coercion, validation, secret masking, optional ECIES encryption, and automatically populates `os.environ` so external libraries work without extra setup.
 
 ## Installation
 
-Add to your `pyproject.toml`:
+```bash
+# uv
+uv add notoriosti-env-manager
 
-```toml
-[project]
-dependencies = [
-    "env-manager @ git+https://github.com/NotoriosTI/env-manager.git@main",
-]
+# Poetry
+poetry add notoriosti-env-manager
 ```
 
-Then install with Poetry or pip.
+For encrypted `.env` file support:
+
+```bash
+uv add "notoriosti-env-manager[encrypted]"
+poetry add "notoriosti-env-manager[encrypted]"
+```
 
 ## Quickstart
 
-### Basic Usage (Recommended)
-
-The singleton pattern is the simplest way to use env-manager:
+Initialize once at startup, use anywhere:
 
 ```python
-# main.py - Initialize once at startup
 from env_manager import init_config, get_config
 
 init_config("config/config_vars.yaml")
 
-# Now use anywhere in your codebase
 db_password = get_config("DB_PASSWORD")
 api_timeout = get_config("API_TIMEOUT", 30)  # with default
 ```
 
 **What happens automatically:**
-- Variables are loaded from `.env` or GCP Secret Manager
-- Type coercion is applied (strings → int/float/bool as configured)
-- Values are validated (required vs optional)
-- Everything is assigned to `os.environ`
-- External libraries (LangChain, LangGraph, etc.) work automatically
-
-**Example:**
-```python
-# config_vars.yaml defines PORT as type: int
-init_config("config/config_vars.yaml")
-
-port = get_config("PORT")  # → 8080 (actual int, not string)
-# os.environ["PORT"] is now "8080" (string, for external libraries)
-```
-
-### Secret Sources
-
-By default, secrets are loaded from `.env` files. To use Google Cloud Secret Manager, set `SECRET_ORIGIN=gcp`.
-
-**Priority order:**
-1. Explicit parameter: `init_config(..., secret_origin="gcp")`
-2. Environment variable: `export SECRET_ORIGIN=gcp`
-3. `.env` file: `SECRET_ORIGIN=gcp`
-4. Default: `"local"`
-
+- Secrets are fetched from `.env` or GCP Secret Manager
+- Types are coerced per YAML definitions (`str`, `int`, `float`, `bool`)
+- Required/optional validation runs and logs warnings or raises errors
+- All values are written to `os.environ` as strings
+- Secrets are masked in all log output
 
 ## Configuration File
 
-Create a YAML file (e.g., `config_vars.yaml`) with this structure:
-
 ```yaml
-# Optional: define named environments (selected via ENVIRONMENT env var)
+# Optional: named environments, selected via ENVIRONMENT env var
 environments:
   production:
     origin: gcp
@@ -72,240 +50,223 @@ environments:
   local:
     origin: local
     dotenv_path: .env
-    default: true   # Used when ENVIRONMENT is not set
+    default: true  # used when ENVIRONMENT is not set
+
+  # With encrypted .env support
+  staging:
+    origin: local
+    dotenv_path: .env.staging
+    encrypted_dotenv:
+      enabled: true
+      private_key:                       # optional — omit to use env vars or .env.keys
+        source: DOTENV_PRIVATE_KEY       # secret name containing the hex private key
+        secret_origin: gcp              # 'local' or 'gcp'
+        gcp_project_id: my-gcp-project
 
 variables:
-  # Required secret (must exist in .env or GCP)
   DB_PASSWORD:
-    source: DB_PASSWORD
+    source: DB_PASSWORD   # name in .env or GCP Secret Manager
     type: str
 
-  # Optional with fallback
   PORT:
     source: PORT
     type: int
     default: 8080
 
-  # Constant (no external source needed)
   LOG_LEVEL:
     type: str
-    default: "INFO"
+    default: "INFO"   # constant — no external source needed
 
-  # Per-variable origin override
   ANALYTICS_KEY:
     source: ANALYTICS_KEY
     type: str
-    origin: gcp                    # Always fetch from GCP, regardless of global setting
-    dotenv_path: secrets/.env.gcp  # Optional: custom .env path for this variable
+    origin: gcp                      # per-variable origin override
+    dotenv_path: secrets/.env.gcp   # per-variable custom .env path
 
 validation:
-  strict: false
+  strict: false    # true → all variables must resolve (ignores defaults)
   required:
-    - DB_PASSWORD    # Error if missing
+    - DB_PASSWORD  # raises ConfigValidationError if missing
   optional:
-    - DEBUG_MODE     # Warning if missing
+    - DEBUG_MODE   # logs warning if missing
 ```
 
-### Variable Definition Rules
+### Variable fields
 
-Each variable must have **at least one** of:
-- `source`: Name of the secret in `.env` or GCP Secret Manager
-- `default`: Fallback value if not found
+| Field | Description |
+|---|---|
+| `source` | Name in `.env` or GCP Secret Manager |
+| `type` | `str` (default), `int`, `float`, `bool` |
+| `default` | Fallback value if not found |
+| `origin` | `"local"` or `"gcp"` — overrides global secret origin for this variable |
+| `dotenv_path` | Custom `.env` path for this variable |
+| `environment` | Named environment to use as source context |
 
-**Optional per-variable overrides:**
-- `origin`: `"local"` or `"gcp"` — overrides the global `secret_origin` for this variable
-- `environment`: Name of a defined environment to use as the source context for this variable
-- `dotenv_path`: Path to a custom `.env` file for this variable (relative to project root)
+Each variable must have at least one of `source` or `default`.
 
-**Type coercion** (`type` field):
-- `str` (default): No conversion
-- `int`: Converts to integer
-- `float`: Converts to float
-- `bool`: Accepts only `"true"`, `"True"`, `"1"`, `"false"`, `"False"`, `"0"`
+**Boolean coercion** accepts only: `"true"`, `"True"`, `"1"`, `"false"`, `"False"`, `"0"`.
 
-**Validation** (`validation` section):
-- `required`: Raises error if variable is missing
-- `optional`: Logs warning if variable is missing
-- `strict: true`: Enforces all variables must have values (ignores defaults)
+## Secret Origin Resolution
 
-**Environments** (`environments` section):
-- Named environments with their own `origin`, `dotenv_path`, and/or `gcp_project_id`
-- Active environment selected via `ENVIRONMENT` env var
-- Mark one as `default: true` to use when `ENVIRONMENT` is not set
+| Priority | Source |
+|---|---|
+| 1 | Explicit parameter: `init_config(..., secret_origin="gcp")` |
+| 2 | `SECRET_ORIGIN` environment variable |
+| 3 | `SECRET_ORIGIN=gcp` in `.env` file |
+| 4 | Active environment's `origin` field |
+| 5 | Default: `"local"` |
 
-## Complete API Reference
+## GCP Project ID Resolution
 
-### Singleton API (Recommended)
+| Priority | Source |
+|---|---|
+| 1 | Explicit parameter: `init_config(..., gcp_project_id="my-project")` |
+| 2 | `GCP_PROJECT_ID` environment variable |
+| 3 | `GCP_PROJECT_ID` in `.env` file |
+| 4 | Active environment's `gcp_project_id` field |
+
+## API Reference
+
+### Singleton API (recommended)
 
 ```python
 from env_manager import init_config, get_config, require_config
 
-# Initialize once
 init_config(
     "config/config_vars.yaml",
-    secret_origin=None,      # "local" or "gcp" (auto-detected if None)
-    gcp_project_id=None,     # Required if secret_origin="gcp"
-    strict=None,             # Override YAML strict setting
-    dotenv_path=None,        # Custom .env path (auto-detected if None)
-    debug=False,             # Show raw secrets in logs (NEVER in production)
+    secret_origin=None,    # "local" or "gcp" — auto-detected if None
+    gcp_project_id=None,   # required when secret_origin="gcp"
+    strict=None,           # overrides YAML strict setting
+    dotenv_path=None,      # custom .env path — auto-detected if None
+    debug=False,           # log raw secret values (never use in production)
 )
 
-# Use anywhere
-value = get_config("KEY")                  # Returns value or None
-value = get_config("KEY", "default")       # Returns value or provided default
-value = require_config("REQUIRED_KEY")     # Raises RuntimeError if missing
+get_config("KEY")             # typed value or None
+get_config("KEY", "default")  # typed value or provided default
+require_config("KEY")         # typed value or raises RuntimeError
 ```
 
-### Instance API (Advanced)
+### Instance API
 
-**When to use ConfigManager directly:**
-- Multiple configurations simultaneously
-- Advanced testing with dependency injection
-- Complex microservices architectures
+For multiple configs, dependency injection, or testing:
 
 ```python
 from env_manager import ConfigManager
 
 manager = ConfigManager(
     config_path="config/config_vars.yaml",
-    secret_origin=None,      # "local" or "gcp" (falls back to env var)
-    gcp_project_id=None,     # overrides discovery from env/.env
-    strict=None,             # overrides YAML strict flag
-    auto_load=True,          # eagerly load and validate
-    debug=False,             # set True to log raw secret values
+    secret_origin=None,
+    gcp_project_id=None,
+    strict=None,
+    auto_load=True,
+    dotenv_path=None,
+    debug=False,
 )
 
-manager.get("DB_PASSWORD")        # Returns value or None
-manager.get("PORT", 8080)         # Returns value or provided default
-manager.require("API_KEY")        # Raises RuntimeError if missing
-manager.values                    # Dict of all loaded values
+manager.get("DB_PASSWORD")
+manager.get("PORT", 8080)
+manager.require("API_KEY")
+manager.values              # dict of all loaded values
 ```
 
-### Low-level Loader API (Expert)
-
-For custom integrations, the loader abstraction is also exported:
+### Loader API
 
 ```python
-from env_manager import SecretLoader, create_loader
+from env_manager import create_loader
 
-# Create a loader directly
-loader = create_loader("local", dotenv_path=".env")          # DotEnvLoader
-loader = create_loader("gcp", gcp_project_id="my-project")  # GCPSecretLoader
+loader = create_loader("local", dotenv_path=".env")
+loader = create_loader("gcp", gcp_project_id="my-project")
 
-# Fetch secrets
 values = loader.get_many(["DB_PASSWORD", "API_KEY"])
 # → {"DB_PASSWORD": "secret", "API_KEY": "key123"}
 ```
 
-`create_loader` raises `ValueError` for unsupported origins (anything other than `"local"` or `"gcp"`).
+## Encrypted .env Files
 
-**Example: Multiple configurations**
-```python
-prod_config = ConfigManager("config/prod.yaml", secret_origin="gcp")
-dev_config = ConfigManager("config/dev.yaml", secret_origin="local")
+env-manager supports dotenvx-compatible ECIES encryption (secp256k1 + AES-256-GCM). Encrypted files are safe to commit to source control.
 
-prod_db = prod_config.get("DB_PASSWORD")
-dev_db = dev_config.get("DB_PASSWORD")
-```
+**Requires the `[encrypted]` extra.**
 
-**Example: Testing with dependency injection**
-```python
-class DatabaseService:
-    def __init__(self, config: ConfigManager = None):
-        self.config = config or ConfigManager("config/config_vars.yaml")
-        self.host = self.config.get("DB_HOST")
+### Encrypting a file
 
-def test_database_service():
-    test_config = ConfigManager("config/test.yaml")
-    service = DatabaseService(config=test_config)
-    # Test in isolation
-```
-
-## How It Works
-
-### Automatic Environment Loading
-
-When you call `init_config()` or create a `ConfigManager`:
-
-1. **Configuration is parsed** from YAML
-2. **Secrets are fetched** from `.env` or GCP Secret Manager
-3. **Types are coerced** according to YAML definitions
-4. **Values are validated** (required/optional checks)
-5. **Variables are assigned to `os.environ`** automatically
-6. **Secrets are masked** in all log output
-
-This means external libraries that read from `os.environ` (like LangChain, LangGraph, etc.) work automatically without any additional setup.
-
-### Type Coercion Details
-
-**When you use `get_config()`:** You get the properly typed value
-```python
-port = get_config("PORT")  # → 8080 (int)
-debug = get_config("DEBUG")  # → False (bool)
-```
-
-**When external libraries read `os.environ`:** They get strings
-```python
-os.environ["PORT"]   # → "8080" (string)
-os.environ["DEBUG"]  # → "false" (string)
-```
-
-This is intentional - `os.environ` only stores strings, but external libraries handle string parsing correctly.
-
-### SECRET_ORIGIN Resolution
-
-The `SECRET_ORIGIN` determines where to load secrets from:
-
-**Priority (highest to lowest):**
-1. Explicit parameter: `init_config(..., secret_origin="gcp")`
-2. Environment variable: `export SECRET_ORIGIN=gcp`
-3. `.env` file: `SECRET_ORIGIN=gcp` (read without loading entire file)
-4. Default: `"local"`
-
-**Example:**
 ```bash
-# .env file
-SECRET_ORIGIN=gcp
-GCP_PROJECT_ID=my-project
+# Encrypt .env in-place; writes private key to .env.keys
+env-manager-encrypt .env
+
+# With an environment name (writes DOTENV_PRIVATE_KEY_PRODUCTION to .env.keys)
+env-manager-encrypt .env --env production
+
+# Overwrite existing .env.keys
+env-manager-encrypt .env --force
 ```
+
+After encryption, `.env` values become `encrypted:<base64>` blobs and `DOTENV_PUBLIC_KEY` is written into the file header. The private key is written to `.env.keys` (same directory).
+
+### Decryption at load time
+
+Decryption is automatic when enabled in config. Private key resolution order:
+
+| Priority | Source |
+|---|---|
+| 1 | Explicit kwarg passed to `create_loader` |
+| 2 | `DOTENV_PRIVATE_KEY_<ENV>` environment variable (when environment name is set) |
+| 3 | `DOTENV_PRIVATE_KEY` environment variable |
+| 4 | Colocated `.env.keys` file (same directory as `.env`) |
+
+Enable via YAML:
+
+```yaml
+environments:
+  production:
+    origin: local
+    dotenv_path: .env
+    encrypted_dotenv:
+      enabled: true
+```
+
+Or store the private key in GCP and let env-manager fetch it:
+
+```yaml
+environments:
+  production:
+    origin: local
+    dotenv_path: .env
+    encrypted_dotenv:
+      enabled: true
+      private_key:
+        source: DOTENV_PRIVATE_KEY
+        secret_origin: gcp
+        gcp_project_id: my-gcp-project
+```
+
+> **Warning:** Never `source .env` in a shell when the file is encrypted. The shell assigns raw ciphertext strings — no decryption occurs.
+
+### Exceptions
 
 ```python
-# Automatically uses GCP from .env
-init_config("config/config_vars.yaml")
+from env_manager import DecryptionError, DecryptionIssue
+
+try:
+    init_config("config/config_vars.yaml")
+except DecryptionError as exc:
+    for issue in exc.issues:  # list[DecryptionIssue]
+        print(issue.key, issue.message)
 ```
 
-### GCP_PROJECT_ID Resolution
-
-When using `secret_origin="gcp"`, the GCP project ID is resolved with:
-
-1. Explicit parameter: `init_config(..., gcp_project_id="my-project")`
-2. Environment variable: `export GCP_PROJECT_ID=my-project`
-3. `.env` file: `GCP_PROJECT_ID=my-project`
-4. Not set (warning logged)
+`ConfigValidationError` works the same way, with `issues: list[ConfigValidationIssue]` where each issue has `variable` and `message` fields.
 
 ## Secret Masking
 
-All secrets are automatically masked in logs for security:
+All secrets are masked in logs:
 
 - **Short secrets** (< 10 chars): `**********`
 - **Long secrets**: `ab****1234` (first 2 + last 4 chars shown)
 
-Set `debug=True` to temporarily see raw values (never use in production):
-
 ```python
-init_config("config/config_vars.yaml", debug=True)
+init_config("config/config_vars.yaml", debug=True)  # shows raw values — never in production
 ```
 
-## Migration Guide
-
-If you're migrating from `python-dotenv` or manual `os.environ` usage:
-
-1. **Copy** `config_vars.yaml.example` to your project
-2. **Customize** the YAML with your variables
-3. **Install** env-manager in your dependencies
-4. **Replace** `load_dotenv()` with `init_config("config/config_vars.yaml")`
-5. **Replace** `os.environ["KEY"]` with `get_config("KEY")`
-6. **Configure** `SECRET_ORIGIN=gcp` and `GCP_PROJECT_ID` for production
+## Migration from python-dotenv
 
 **Before:**
 ```python
@@ -323,53 +284,37 @@ from env_manager import init_config, get_config
 
 init_config("config/config_vars.yaml")
 db_password = get_config("DB_PASSWORD")
-port = get_config("PORT")  # Already an int, with default 8080
+port = get_config("PORT")  # already an int, default 8080 from YAML
 ```
 
 ## Troubleshooting
 
-**`Configuration manager not initialised`**
-- Call `init_config()` before using `get_config()` or `require_config()`
+**`Configuration manager not initialised`** — call `init_config()` before `get_config()` or `require_config()`.
 
-**`Missing GCP project ID`**
-- Set `GCP_PROJECT_ID` via parameter, environment variable, or `.env` file
+**`Missing GCP project ID`** — set `GCP_PROJECT_ID` via parameter, env var, or `.env`.
 
-**`Type coercion failed`**
-- Check the YAML `type` field matches your value format
-- Ensure boolean values are exactly `"true"`, `"false"`, `"1"`, or `"0"`
+**`Type coercion failed`** — check the `type` field in YAML matches your value format. Booleans must be exactly `"true"`, `"false"`, `"1"`, or `"0"`.
 
-**`Required variable not found`**
-- Verify the secret exists in `.env` or GCP Secret Manager
-- Check the secret name matches the YAML `source` field
-- Ensure GCP credentials have access to the project
+**`Required variable not found`** — verify the secret exists in `.env` or GCP, the name matches the `source` field, and GCP credentials have access.
 
-**Variables not loaded**
-- Confirm `init_config()` was called successfully
-- Check logs for warnings or errors
-- Verify `.env` file exists and is in the correct location
+**`eciespy is required`** — install the encrypted extra: `uv add "notoriosti-env-manager[encrypted]"`.
+
+**`FileExistsError: .env.keys already exists`** — use `env-manager-encrypt .env --force` to overwrite.
 
 ## Development
 
 ```bash
-# Install dependencies
-poetry install
-
-# Run tests
+uv sync
 pytest -v
-
-# Run with coverage
 pytest --cov=env_manager --cov-report=html
 ```
 
-The project uses Python 3.13+, Poetry for dependency management, and pytest for testing.
-
 ## Related Projects
 
-Looking for a TypeScript/Node.js version? Check out **[env-manager-js](https://github.com/NotoriosTI/env-manager-js)** — a TypeScript implementation with full feature parity. Both projects share the same YAML config format, secret resolution logic, and API design, so you can use whichever fits your stack.
+**[env-manager-js](https://github.com/NotoriosTI/env-manager-js)** — TypeScript implementation with full feature parity. Both share the same YAML config format and secret resolution logic.
 
 ## License
 
 Copyright (c) 2025 NotoriosTI. All rights reserved.
 
 This software is proprietary and confidential. Unauthorized copying, distribution, or use of this software, in whole or in part, is strictly prohibited.
-
