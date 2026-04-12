@@ -5,7 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-_VALID_ORIGINS = {"local", "gcp"}
+ORIGIN_ALIASES: dict[str, str] = {
+    "dotenv":              "local",
+    "env-file":            "local",
+    ".env":                "local",
+    "gcp-secretmanager":   "gcp",
+    "secretmanager":       "gcp",
+    "gcp-secret-manager":  "gcp",
+}
+
+CANONICAL_ORIGINS: frozenset[str] = frozenset({"local", "gcp"})
+_VALID_ORIGINS = CANONICAL_ORIGINS | frozenset(ORIGIN_ALIASES)
 
 
 @dataclass
@@ -95,6 +105,9 @@ def parse_environments(
                 f"Environment '{env_name}' has invalid origin '{origin}'; "
                 f"expected one of {sorted(_VALID_ORIGINS)}"
             )
+
+        # Normalize aliases to their canonical origin name
+        origin = ORIGIN_ALIASES.get(origin, origin)
 
         # -- origin-specific fields -------------------------------------------
         dotenv_path: Optional[str] = None

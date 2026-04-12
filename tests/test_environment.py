@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from env_manager.environment import EnvironmentConfig, parse_environments
+from env_manager.environment import CANONICAL_ORIGINS, ORIGIN_ALIASES, EnvironmentConfig, parse_environments
 
 
 def test_no_environments_key_returns_empty_dict():
@@ -222,3 +222,38 @@ def test_dataclass_fields():
     assert cfg.origin == "local"
     assert cfg.dotenv_path == ".env"
     assert cfg.gcp_project_id is None
+
+
+@pytest.mark.parametrize("alias", ["dotenv", "env-file", ".env"])
+def test_local_origin_aliases_normalize_to_local(alias):
+    raw_config = {
+        "environments": {
+            "dev": {
+                "origin": alias,
+            }
+        }
+    }
+    result = parse_environments(raw_config)
+    assert result["dev"].origin == "local"
+    assert result["dev"].dotenv_path == ".env"
+
+
+@pytest.mark.parametrize("alias", ["DOTENV", "ENV-FILE", ".ENV"])
+def test_local_origin_aliases_case_insensitive(alias):
+    raw_config = {
+        "environments": {
+            "dev": {
+                "origin": alias,
+            }
+        }
+    }
+    result = parse_environments(raw_config)
+    assert result["dev"].origin == "local"
+
+
+def test_all_alias_targets_are_canonical_origins():
+    """Every alias must resolve to a value in CANONICAL_ORIGINS."""
+    for alias, target in ORIGIN_ALIASES.items():
+        assert target in CANONICAL_ORIGINS, (
+            f"Alias '{alias}' maps to '{target}', which is not a canonical origin"
+        )
