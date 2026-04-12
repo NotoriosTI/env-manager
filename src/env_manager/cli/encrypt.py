@@ -34,19 +34,23 @@ def _normalize_env_name(name: str) -> str:
 def encrypt_dotenv_file(
     file_path: str,
     *,
+    output_path: Optional[str] = None,
     env_name: Optional[str] = None,
     force: bool = False,
 ) -> None:
-    """Encrypt a plaintext .env file in-place with dotenvx-compatible ECIES.
+    """Encrypt a plaintext .env file with dotenvx-compatible ECIES.
 
     Generates a secp256k1 key pair, rewrites plaintext values as
-    encrypted:<base64>, writes DOTENV_PUBLIC_KEY to the .env header,
+    encrypted:<base64>, writes DOTENV_PUBLIC_KEY to the output header,
     and outputs the private key to a colocated .env.keys file.
 
     Parameters
     ----------
     file_path : str
         Path to the .env file to encrypt.
+    output_path : str, optional
+        Destination path for the encrypted file. When omitted the input
+        file is encrypted in-place.
     env_name : str, optional
         Environment name. When set, .env.keys uses
         DOTENV_PRIVATE_KEY_<NORMALIZED> instead of DOTENV_PRIVATE_KEY.
@@ -76,7 +80,8 @@ def encrypt_dotenv_file(
     if not env_path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    keys_path = env_path.parent / ".env.keys"
+    out_path = Path(output_path) if output_path else env_path
+    keys_path = out_path.parent / ".env.keys"
     if keys_path.exists() and not force:
         raise FileExistsError(
             f"{keys_path} already exists. Use --force to overwrite."
@@ -111,12 +116,12 @@ def encrypt_dotenv_file(
             enc_b64 = base64.b64encode(cipher_bytes).decode("ascii")
             lines.append(f'{var_name}="{ENCRYPTED_PREFIX}{enc_b64}"')
 
-    # Write encrypted .env with header
+    # Write encrypted output
     env_content = DOTENV_HEADER
     env_content += f'DOTENV_PUBLIC_KEY="{pub_hex}"\n'
     for line in lines:
         env_content += line + "\n"
-    env_path.write_text(env_content)
+    out_path.write_text(env_content)
 
     # Write .env.keys
     if env_name:
@@ -141,6 +146,12 @@ def main() -> None:
     )
     parser.add_argument("file", help="Path to the .env file to encrypt")
     parser.add_argument(
+        "-o", "--output",
+        default=None,
+        metavar="OUTPUT",
+        help="Write encrypted output to this path instead of modifying the input file in-place",
+    )
+    parser.add_argument(
         "--env",
         default=None,
         help="Environment name (writes DOTENV_PRIVATE_KEY_<NAME> in .env.keys)",
@@ -153,13 +164,14 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        encrypt_dotenv_file(args.file, env_name=args.env, force=args.force)
+        encrypt_dotenv_file(args.file, output_path=args.output, env_name=args.env, force=args.force)
     except (FileNotFoundError, FileExistsError, ValueError, ImportError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Encrypted {args.file}")
-    keys_path = Path(args.file).parent / ".env.keys"
+    out = args.output or args.file
+    print(f"Encrypted {args.file} -> {out}")
+    keys_path = Path(out).parent / ".env.keys"
     print(f"Private key written to {keys_path}")
 
 
