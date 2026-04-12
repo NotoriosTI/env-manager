@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from env_manager.base import SecretLoader
+from env_manager.environment import ORIGIN_ALIASES
 from env_manager.loaders import DotEnvLoader, GCPSecretLoader
 
 from env_manager.utils import logger
@@ -22,6 +23,7 @@ def create_loader(
     """Instantiate the appropriate loader for ``secret_origin``."""
 
     origin = (secret_origin or "local").strip().lower()
+    origin = ORIGIN_ALIASES.get(origin, origin)
 
     if origin == "local":
         logger.info("Loading secrets from .env")
@@ -41,5 +43,7 @@ def create_loader(
         return GCPSecretLoader(project_id=gcp_project_id)
 
     raise ValueError(
-        f"Unsupported SECRET_ORIGIN '{secret_origin}'. Expected 'local' or 'gcp'."
+        f"Unsupported SECRET_ORIGIN '{secret_origin}'. "
+        "Expected 'local' (aliases: 'dotenv', 'env-file', '.env') "
+        "or 'gcp' (aliases: 'gcp-secretmanager', 'gcp-secret-manager', 'secretmanager')."
     )

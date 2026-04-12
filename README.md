@@ -116,6 +116,25 @@ Each variable must have at least one of `source` or `default`.
 | 4 | Active environment's `origin` field |
 | 5 | Default: `"local"` |
 
+### Origin Aliases
+
+Both `origin` fields and the `SECRET_ORIGIN` environment variable accept canonical names or any of their aliases (case-insensitive):
+
+| Canonical | Accepted aliases |
+|---|---|
+| `local` | `dotenv`, `env-file`, `.env` |
+| `gcp` | `gcp-secretmanager`, `gcp-secret-manager`, `secretmanager` |
+
+```yaml
+# These are all equivalent
+environments:
+  dev:
+    origin: dotenv      # same as local
+  prod:
+    origin: gcp-secretmanager  # same as gcp
+    gcp_project_id: my-project
+```
+
 ## GCP Project ID Resolution
 
 | Priority | Source |
