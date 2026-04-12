@@ -1,0 +1,47 @@
+---
+session: general
+date: 2026-04-08
+status: partial
+outcome: PARTIAL_MINUS
+---
+
+goal: Prepare env-manager for PyPI publishing - identified and fixed version mismatch
+now: Replace dev-utils git dependency with local rich-based implementation
+test: cd .claude/worktrees/fix-dev-utils && poetry build
+done_this_session:
+  - task: Fixed version mismatch between pyproject.toml (0.2.1) and __init__.py (0.1.0)
+    files: [src/env_manager/__init__.py]
+  - task: Built package successfully with poetry build
+    files: [dist/env_manager-0.2.1-py3-none-any.whl, dist/env_manager-0.2.1.tar.gz]
+  - task: Identified blocker - git dependency on dev-utils used in 4 files
+    files: [pyproject.toml]
+
+blockers:
+  - dev-utils git dependency must be replaced before PyPI publish
+  - dev-utils.pretty_logger.PrettyLogger used in 4 source files
+
+questions:
+  - Should PrettyLogger be vendored entirely or refactored to use rich directly?
+
+decisions:
+  - approach: Use rich (already a dependency) instead of dev-utils PrettyLogger
+
+findings:
+  - dev_utils imported in: factory.py:11, loaders/dotenv.py:17, utils.py:19, loaders/gcp.py:13
+  - PrettyLogger wraps rich.console.Console and rich.logging
+
+worked:
+  - poetry build produces valid wheel and tarball
+
+next:
+  - Create worktree at .claude/worktrees/fix-dev-utils with branch fix/dev-utils-dependency
+  - Replace dev_utils imports with local rich-based logger
+  - Update pyproject.toml to remove git dependency
+  - Rebuild and verify
+
+files:
+  created: []
+  modified:
+    - src/env_manager/__init__.py
+    - dist/env_manager-0.2.1-py3-none-any.whl
+    - dist/env_manager-0.2.1.tar.gz

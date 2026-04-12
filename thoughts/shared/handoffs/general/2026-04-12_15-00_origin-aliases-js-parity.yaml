@@ -1,0 +1,122 @@
+---
+session: general
+date: 2026-04-12
+status: complete
+outcome: SUCCEEDED
+---
+
+goal: Add origin aliases (dotenv/env-file/.env → local, gcp-secretmanager/etc → gcp) to env-manager Python; create JS parity handoff
+now: Port origin alias feature to env-manager-js for feature parity with Python v0.2.2
+test: cd /Users/bastianibanez/work/env-manager-js && npm test
+
+done_this_session:
+  - task: Added ORIGIN_ALIASES dict to Python env-manager and normalized aliases in environment.py and factory.py
+    files: [src/env_manager/environment.py, src/env_manager/factory.py]
+  - task: Added 7 new tests including structural guard that all alias targets are canonical origins
+    files: [tests/test_environment.py]
+  - task: Documented aliases in README with table and example
+    files: [README.md]
+  - task: Bumped version to 0.2.2 and opened PR NotoriosTI/env-manager#15
+    files: [pyproject.toml]
+
+blockers: []
+
+questions: []
+
+decisions:
+  - single_source_of_truth: ORIGIN_ALIASES lives in environment.py and is imported by factory.py — no duplication
+  - canonical_normalization: aliases are lowercased and resolved to canonical name before any validation/logic runs; SecretOrigin type stays clean
+  - structural_test: test_all_alias_targets_are_canonical_origins guards that every alias target is in CANONICAL_ORIGINS
+
+findings:
+  - js_has_same_two_files: env-manager-js mirrors Python exactly — src/environment.ts validates/parses, src/factory.ts creates loaders
+  - types_ts_constraint: SecretOrigin = 'local' | 'gcp' in src/types.ts:1 — this type must stay canonical; aliases must be normalized before they touch it
+  - three_locations_need_changes: environment.ts (validation + normalize), factory.ts (normalize before matching), manager.ts:252 (per-variable origin override validation also hardcodes 'local'/'gcp')
+  - cache_key_in_factory: factory.ts builds a loaderCache key from normalizedOrigin — normalization must happen before the cache key is computed (line 13)
+
+worked:
+  - Defining ORIGIN_ALIASES as Record<alias, canonical> makes normalization a one-liner (.get(origin, origin) in Python / aliasMap[origin] ?? origin in TS)
+  - Exporting CANONICAL_ORIGINS as a frozenset/Set lets the structural test verify the mapping without hardcoding
+
+failed: []
+
+next:
+  - "1. In src/environment.ts: add exported ORIGIN_ALIASES const and CANONICAL_ORIGINS Set, normalize origin with ORIGIN_ALIASES lookup before the local/gcp branch — see exact changes below"
+  - "2. In src/factory.ts: import ORIGIN_ALIASES from environment.ts, apply normalization before the cacheKey line (line 13)"
+  - "3. In src/manager.ts:251-254: import ORIGIN_ALIASES, normalize originOverride before the if-check, replace hardcoded 'local'/'gcp' string check with CANONICAL_ORIGINS.has()"
+  - "4. In tests/environment.test.ts: add parametrized alias tests (dotenv, env-file, .env → local; gcp-secretmanager, gcp-secret-manager, secretmanager → gcp) and a structural test that all alias values are in CANONICAL_ORIGINS"
+  - "5. Bump version in package.json (currently 0.2.1 → 0.2.2), build, open PR to main"
+
+files:
+  created: []
+  modified:
+    - src/env_manager/environment.py
+    - src/env_manager/factory.py
+    - tests/test_environment.py
+    - README.md
+    - pyproject.toml
+
+# ── Detailed JS implementation guide ─────────────────────────────────────────
+
+# src/environment.ts changes
+# --------------------------
+# Add near top (after imports):
+#
+#   export const ORIGIN_ALIASES: Record<string, 'local' | 'gcp'> = {
+#     dotenv:             'local',
+#     'env-file':         'local',
+#     '.env':             'local',
+#     'gcp-secretmanager':  'gcp',
+#     'gcp-secret-manager': 'gcp',
+#     secretmanager:        'gcp',
+#   };
+#   export const CANONICAL_ORIGINS = new Set<string>(['local', 'gcp']);
+#
+# Replace the existing validation block (lines 42-48):
+#   OLD:
+#     const origin = rawOrigin.toLowerCase();
+#     if (origin !== 'local' && origin !== 'gcp') {
+#       throw new Error(`Invalid origin '${rawOrigin}' in environment '${name}'. Must be 'local' or 'gcp'`);
+#     }
+#
+#   NEW:
+#     const rawLower = rawOrigin.toLowerCase();
+#     const origin = (ORIGIN_ALIASES[rawLower] ?? rawLower) as 'local' | 'gcp';
+#     if (!CANONICAL_ORIGINS.has(origin)) {
+#       throw new Error(`Invalid origin '${rawOrigin}' in environment '${name}'. Must be 'local' or 'gcp' (or an alias)`);
+#     }
+
+# src/factory.ts changes
+# ----------------------
+# Add import: import { ORIGIN_ALIASES } from './environment.js';
+#
+# Before the cacheKey line (currently line 13):
+#   OLD:
+#     const normalizedOrigin = (secretOrigin ?? '').toLowerCase();
+#     const cacheKey = ...
+#
+#   NEW:
+#     const rawOrigin = (secretOrigin ?? '').toLowerCase();
+#     const normalizedOrigin = ORIGIN_ALIASES[rawOrigin] ?? rawOrigin;
+#     const cacheKey = ...
+
+# src/manager.ts changes
+# ----------------------
+# Add ORIGIN_ALIASES to import from environment.ts (or from a shared barrel).
+# At line ~251:
+#   OLD:
+#     const originOverride = varDef.secretOrigin ?? varDef.origin;
+#     if (originOverride != null && originOverride !== 'local' && originOverride !== 'gcp') {
+#       throw ...
+#     }
+#
+#   NEW:
+#     const rawOverride = varDef.secretOrigin ?? varDef.origin;
+#     const originOverride = rawOverride != null
+#       ? ((ORIGIN_ALIASES[rawOverride.toLowerCase()] ?? rawOverride.toLowerCase()) as SecretOrigin)
+#       : null;
+#     if (originOverride != null && !CANONICAL_ORIGINS.has(originOverride)) {
+#       throw ...
+#     }
+#
+# Also update line ~374 where originOverride is cast directly — now it's already normalized.
