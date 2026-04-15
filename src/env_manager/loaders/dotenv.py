@@ -35,7 +35,6 @@ class DotEnvLoader(SecretLoader):
         self._encrypted_enabled = encrypted
         self._environment_name = environment_name
         self._explicit_private_key = explicit_private_key
-        self._resolved_private_key: Optional[str] = None  # lazy cache
 
     def _resolve_path(self, dotenv_path: Optional[str]) -> Optional[str]:
         if dotenv_path:
@@ -86,10 +85,8 @@ class DotEnvLoader(SecretLoader):
         return None
 
     def _get_private_key(self) -> Optional[str]:
-        """Return cached private key, resolving on first call."""
-        if self._resolved_private_key is None:
-            self._resolved_private_key = self._resolve_private_key()
-        return self._resolved_private_key
+        """Resolve private key on each call — no caching to minimize key lifetime."""
+        return self._resolve_private_key()
 
     def _decrypt_value(self, key: str, raw_value: str) -> dict:
         """Attempt to decrypt a single encrypted: value.

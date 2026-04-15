@@ -69,7 +69,6 @@ class ConfigManager:
         self._values: dict[str, Any] = {}
         self._loaded = False
         self._encrypted_enabled: bool = False
-        self._explicit_private_key: Optional[str] = None
 
         if auto_load:
             self.load()
@@ -242,13 +241,14 @@ class ConfigManager:
                     "Encrypted dotenv loading from non-local origins is not yet supported. "
                     "See Backlog 999.1."
                 )
+            _, explicit_private_key = self._resolve_encrypted_dotenv_config()
             loader = create_loader(
                 context.origin,
                 gcp_project_id=context.gcp_project_id,
                 dotenv_path=context.dotenv_path,
                 encrypted=self._encrypted_enabled,
                 environment_name=context.environment_name,
-                explicit_private_key=self._explicit_private_key,
+                explicit_private_key=explicit_private_key,
             )
             self._loaders[cache_key] = loader
         return loader
@@ -360,9 +360,9 @@ class ConfigManager:
             return
 
         self._loaders = {}  # Reset loader cache for retry safety (Phase 01 pattern)
-        encrypted_enabled, explicit_private_key = self._resolve_encrypted_dotenv_config()
+        encrypted_enabled, _ = self._resolve_encrypted_dotenv_config()
         self._encrypted_enabled = encrypted_enabled
-        self._explicit_private_key = explicit_private_key
+        # explicit_private_key is resolved fresh in _get_loader_for_context() — not cached here
 
         sources = {}
         contexts: dict[str, SourceContext] = {}
