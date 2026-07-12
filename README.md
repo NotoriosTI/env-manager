@@ -135,6 +135,37 @@ environments:
     gcp_project_id: my-project
 ```
 
+## Consolidated Secret (one JSON secret per app)
+
+To cut Secret Manager costs and API calls, an app can store all of its
+values in **one** GCP secret containing a JSON object
+(`{"DB_USER": "svc", "DB_PASSWORD": "..."}`). env-manager fetches it once
+and resolves every `source` from that payload; keys missing from the JSON
+fall back to individual secret lookups, so migration is incremental.
+
+Configure it per environment in the YAML:
+
+```yaml
+environments:
+  production:
+    origin: gcp
+    gcp_project_id: my-project
+    consolidated_secret: my-app-config
+```
+
+Or via environment variable (useful when the app selects gcp with
+`SECRET_ORIGIN=gcp` instead of `APP_ENV`):
+
+```bash
+export SECRET_ORIGIN=gcp
+export GCP_PROJECT_ID=my-project
+export CONSOLIDATED_SECRET=my-app-config
+```
+
+Resolution order mirrors `GCP_PROJECT_ID`: explicit `init_config(...,
+consolidated_secret=...)` parameter → `CONSOLIDATED_SECRET` env var → `.env`
+value → active environment's `consolidated_secret` → disabled.
+
 ## GCP Project ID Resolution
 
 | Priority | Source |

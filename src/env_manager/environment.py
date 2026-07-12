@@ -46,6 +46,7 @@ class EnvironmentConfig:
     gcp_project_id: Optional[str] = None
     is_default: bool = False
     encrypted_dotenv: Optional[EncryptedDotenvConfig] = None  # Phase 02 addition
+    consolidated_secret: Optional[str] = None
 
 
 def parse_environments(
@@ -112,6 +113,7 @@ def parse_environments(
         # -- origin-specific fields -------------------------------------------
         dotenv_path: Optional[str] = None
         gcp_project_id: Optional[str] = None
+        consolidated_secret: Optional[str] = None
 
         if origin == "local":
             dotenv_path = env_data.get("dotenv_path", ".env")
@@ -123,6 +125,14 @@ def parse_environments(
                     f"Environment '{env_name}' with origin 'gcp' requires "
                     "'gcp_project_id'"
                 )
+            raw_consolidated = env_data.get("consolidated_secret")
+            if raw_consolidated is not None:
+                if not isinstance(raw_consolidated, str) or not raw_consolidated.strip():
+                    raise ValueError(
+                        f"Environment '{env_name}': 'consolidated_secret' must be "
+                        "a non-empty string when provided"
+                    )
+                consolidated_secret = raw_consolidated.strip()
 
         is_default = bool(env_data.get("default", False))
 
@@ -153,6 +163,7 @@ def parse_environments(
             gcp_project_id=gcp_project_id,
             is_default=is_default,
             encrypted_dotenv=encrypted_dotenv,
+            consolidated_secret=consolidated_secret,
         )
 
     explicit_defaults = [name for name, cfg in result.items() if cfg.is_default]

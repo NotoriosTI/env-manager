@@ -153,7 +153,7 @@ validation:
 
     calls: list[tuple[str, str | None, str | None, tuple[str, ...]]] = []
 
-    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None):
+    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None, consolidated_secret=None):
         calls.append((origin, gcp_project_id, dotenv_path, tuple()))
         if origin == "gcp":
             return FakeLoader({"projects/prod-123/secrets/GCP_SECRET": "from-gcp"})
@@ -161,7 +161,7 @@ validation:
 
     original_create_loader = manager_module.create_loader
 
-    def recording_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None):
+    def recording_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None, consolidated_secret=None):
         if origin == "gcp":
             calls.append((origin, gcp_project_id, dotenv_path, ("projects/prod-123/secrets/GCP_SECRET",)))
             return FakeLoader({"projects/prod-123/secrets/GCP_SECRET": "from-gcp"})

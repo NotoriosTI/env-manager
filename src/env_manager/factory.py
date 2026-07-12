@@ -19,6 +19,7 @@ def create_loader(
     encrypted: bool = False,
     environment_name: Optional[str] = None,
     explicit_private_key: Optional[str] = None,
+    consolidated_secret: Optional[str] = None,
 ) -> SecretLoader:
     """Instantiate the appropriate loader for ``secret_origin``."""
 
@@ -40,7 +41,10 @@ def create_loader(
                 "GCP project ID must be provided when SECRET_ORIGIN is 'gcp'."
             )
         logger.info("Loading secrets from GCP Secret Manager")
-        return GCPSecretLoader(project_id=gcp_project_id)
+        return GCPSecretLoader(
+            project_id=gcp_project_id,
+            consolidated_secret=consolidated_secret,
+        )
 
     raise ValueError(
         f"Unsupported SECRET_ORIGIN '{secret_origin}'. "

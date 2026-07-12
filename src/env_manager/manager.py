@@ -26,6 +26,7 @@ class SourceContext:
     origin: str
     dotenv_path: Optional[str]
     gcp_project_id: Optional[str]
+    consolidated_secret: Optional[str] = None
 
 
 class ConfigManager:
@@ -41,6 +42,7 @@ class ConfigManager:
         auto_load: bool = True,
         dotenv_path: Optional[str] = None,
         debug: bool = False,
+        consolidated_secret: Optional[str] = None,
     ) -> None:
         self._config_path = Path(config_path).expanduser().resolve()
         self._project_root = self._discover_project_root()
@@ -62,6 +64,7 @@ class ConfigManager:
 
         self.secret_origin = self._resolve_secret_origin(secret_origin)
         self.gcp_project_id = self._resolve_gcp_project_id(gcp_project_id)
+        self.consolidated_secret = self._resolve_consolidated_secret(consolidated_secret)
         self.strict = self._resolve_strict(strict)
 
         self._loader: Optional[SecretLoader] = None
@@ -166,6 +169,23 @@ class ConfigManager:
         logger.warning("GCP_PROJECT_ID not set. Some features may not work.")
         return None
 
+    def _resolve_consolidated_secret(self, provided: Optional[str]) -> Optional[str]:
+        # Priority order mirrors gcp_project_id:
+        # 1. Explicit parameter  2. CONSOLIDATED_SECRET env var
+        # 3. .env value          4. Active environment config  5. None
+        candidate = (
+            provided
+            or os.environ.get("CONSOLIDATED_SECRET")
+            or self._dotenv_values.get("CONSOLIDATED_SECRET")
+        )
+        if candidate:
+            return candidate.strip()
+
+        if self._active_environment and self._active_environment.consolidated_secret:
+            return self._active_environment.consolidated_secret
+
+        return None
+
     def _resolve_strict(self, provided: Optional[bool]) -> bool:
         if provided is not None:
             return provided
@@ -233,7 +253,13 @@ class ConfigManager:
         return self._loader
 
     def _get_loader_for_context(self, context: SourceContext) -> SecretLoader:
-        cache_key = (context.origin, context.gcp_project_id, context.dotenv_path, context.environment_name)
+        cache_key = (
+            context.origin,
+            context.gcp_project_id,
+            context.dotenv_path,
+            context.environment_name,
+            context.consolidated_secret,
+        )
         loader = self._loaders.get(cache_key)
         if loader is None:
             # Guard: GCP + encrypted is not supported
@@ -249,6 +275,7 @@ class ConfigManager:
                 encrypted=self._encrypted_enabled,
                 environment_name=context.environment_name,
                 explicit_private_key=self._explicit_private_key,
+                consolidated_secret=context.consolidated_secret,
             )
             self._loaders[cache_key] = loader
         return loader
@@ -261,6 +288,7 @@ class ConfigManager:
             origin=self.secret_origin,
             dotenv_path=self._dotenv_path,
             gcp_project_id=self.gcp_project_id,
+            consolidated_secret=self.consolidated_secret,
         )
 
     def _resolve_encrypted_dotenv_config(self) -> tuple[bool, Optional[str]]:
@@ -312,6 +340,7 @@ class ConfigManager:
             origin=environment.origin,
             dotenv_path=self._resolve_environment_dotenv_path(environment),
             gcp_project_id=environment.gcp_project_id,
+            consolidated_secret=environment.consolidated_secret,
         )
 
     def _effective_source_context(
@@ -336,6 +365,7 @@ class ConfigManager:
                 origin=origin,
                 dotenv_path=dotenv_path,
                 gcp_project_id=context.gcp_project_id,
+                consolidated_secret=context.consolidated_secret,
             )
 
         dotenv_override = definition.get("dotenv_path")
@@ -349,6 +379,7 @@ class ConfigManager:
                 origin=context.origin,
                 dotenv_path=self._resolve_project_path(dotenv_override),
                 gcp_project_id=context.gcp_project_id,
+                consolidated_secret=context.consolidated_secret,
             )
 
         return context
@@ -637,6 +668,7 @@ def init_config(
     auto_load: bool = True,
     dotenv_path: Optional[str] = None,
     debug: bool = False,
+    consolidated_secret: Optional[str] = None,
 ) -> ConfigManager:
     """Initialise the global configuration manager singleton."""
 
@@ -653,6 +685,7 @@ def init_config(
         auto_load=auto_load,
         dotenv_path=dotenv_path,
         debug=debug,
+        consolidated_secret=consolidated_secret,
     )
     return _SINGLETON
 
