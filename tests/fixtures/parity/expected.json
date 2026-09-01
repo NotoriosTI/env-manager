@@ -1,0 +1,10 @@
+{
+  "APP_DEBUG": true,
+  "APP_FLAG_STR": "true",
+  "APP_LOG_LEVEL": "INFO",
+  "APP_NAME": "parity-fixture",
+  "APP_PORT": 8080,
+  "APP_RATIO": 0.75,
+  "APP_RETRIES": 3,
+  "APP_TIMEOUT": 45
+}

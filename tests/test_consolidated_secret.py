@@ -23,7 +23,11 @@ def _mock_gcp_client(mocker, secrets: dict[str, str], module: str = "env_manager
         response.payload.data = secrets[secret_name].encode("utf-8")
         return response
 
-    client_mock.access_secret_version.side_effect = lambda name: access(name)
+    # El loader pasa timeout y retry en cada llamada (§1.5.3); el mock los
+    # acepta y los ignora.
+    client_mock.access_secret_version.side_effect = (
+        lambda name, timeout=None, retry=None: access(name)
+    )
     mocker.patch(
         f"{module}.secretmanager.SecretManagerServiceClient",
         return_value=client_mock,

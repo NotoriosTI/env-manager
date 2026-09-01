@@ -1,6 +1,6 @@
 # env-manager
 
-A Python 3.13+ configuration manager that unifies secrets from local `.env` files and Google Cloud Secret Manager. Handles type coercion, validation, secret masking, optional ECIES encryption, and automatically populates `os.environ` so external libraries work without extra setup.
+A Python 3.12+ configuration manager that unifies secrets from local `.env` files and Google Cloud Secret Manager. Handles type coercion, validation, secret masking, optional ECIES encryption, and automatically populates `os.environ` so external libraries work without extra setup.
 
 ## Installation
 
@@ -18,6 +18,17 @@ For encrypted `.env` file support:
 uv add "notoriosti-env-manager[encrypted]"
 poetry add "notoriosti-env-manager[encrypted]"
 ```
+
+> **The `encrypted` extra tops out at Python 3.13.** It pulls in `eciespy`,
+> which depends on `coincurve`, and `coincurve` publishes no wheel for CPython
+> 3.14 on macOS or Linux — installing it there tries to build from source and
+> fails. This applies at runtime too, not just when encrypting: an app that
+> loads an encrypted `.env` needs the extra installed to decrypt.
+>
+> The core library (`.env` + Secret Manager, no ECIES) works on 3.12, 3.13 and
+> 3.14. Supported range: **3.12 – 3.13** with the extra, **3.12 – 3.14**
+> without it. The test suite runs green on 3.12 and 3.13; on 3.14 the encrypted
+> tests cannot be collected.
 
 ## Quickstart
 
@@ -175,6 +186,52 @@ value → active environment's `consolidated_secret` → disabled.
 | 3 | `GCP_PROJECT_ID` in `.env` file |
 | 4 | Active environment's `gcp_project_id` field |
 
+## CLI
+
+One binary, `env-manager`, with actions as subcommands:
+
+```bash
+env-manager encrypt <file> [--env NAME] [--force] [-o OUT] [--format text|json]
+env-manager decrypt <file> [--env NAME] [--key HEX] [-o OUT] [--format text|json]
+
+env-manager secrets list <secret> --project PROJECT [--format text|json]
+echo -n "value" | env-manager secrets set <secret> --key KEY --project PROJECT
+
+env-manager --version
+env-manager --help
+```
+
+`env-manager-encrypt` and `env-manager-decrypt` still work for one more
+release: they print a deprecation warning to stderr and delegate to the
+dispatcher. They are removed in the next release.
+
+Results go to stdout, diagnostics to stderr. Exit codes are stable per
+category:
+
+| code | meaning |
+|---|---|
+| 0 | success |
+| 1 | usage error (missing argument, unknown action, bad flag) |
+| 2 | operation error (file missing, already encrypted, decryption failed) |
+| 3 | missing optional dependency (the `encrypted` extra) |
+| 4 | Secret Manager failure |
+
+### Rotating a key in the consolidated secret
+
+```bash
+echo -n "new-value" | \
+  env-manager secrets set my-app-config --key DB_PASSWORD --project my-gcp-project
+
+env-manager secrets list my-app-config --project my-gcp-project   # names only
+```
+
+`secrets set` reads the current JSON payload, merges the key, adds a new
+version, reads it back to verify, and only then destroys the previously enabled
+versions — Secret Manager bills per enabled version. Writing the same value
+twice creates no new version. The value comes from stdin, never from `argv`,
+where it would land in `ps` and in shell history. A secret that does not exist
+is an error: create it empty by hand first.
+
 ## API Reference
 
 ### Singleton API (recommended)
@@ -241,13 +298,22 @@ env-manager supports dotenvx-compatible ECIES encryption (secp256k1 + AES-256-GC
 
 ```bash
 # Encrypt .env in-place; writes private key to .env.keys
-env-manager-encrypt .env
+env-manager encrypt .env
 
 # With an environment name (writes DOTENV_PRIVATE_KEY_PRODUCTION to .env.keys)
-env-manager-encrypt .env --env production
+env-manager encrypt .env --env production
 
 # Overwrite existing .env.keys
-env-manager-encrypt .env --force
+env-manager encrypt .env --force
+```
+
+### Decrypting a file
+
+```bash
+env-manager decrypt .env                      # key read from .env.keys
+env-manager decrypt .env --env production     # DOTENV_PRIVATE_KEY_PRODUCTION
+env-manager decrypt .env --key <hex>          # explicit key, skips .env.keys
+env-manager decrypt .env -o .env.plain        # write elsewhere
 ```
 
 After encryption, `.env` values become `encrypted:<base64>` blobs and `DOTENV_PUBLIC_KEY` is written into the file header. The private key is written to `.env.keys` (same directory).
@@ -349,7 +415,7 @@ port = get_config("PORT")  # already an int, default 8080 from YAML
 
 **`eciespy is required`** — install the encrypted extra: `uv add "notoriosti-env-manager[encrypted]"`.
 
-**`FileExistsError: .env.keys already exists`** — use `env-manager-encrypt .env --force` to overwrite.
+**`FileExistsError: .env.keys already exists`** — use `env-manager encrypt .env --force` to overwrite.
 
 ## Development
 

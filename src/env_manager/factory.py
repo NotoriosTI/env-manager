@@ -20,6 +20,7 @@ def create_loader(
     environment_name: Optional[str] = None,
     explicit_private_key: Optional[str] = None,
     consolidated_secret: Optional[str] = None,
+    gcp_timeout: Optional[float] = None,
 ) -> SecretLoader:
     """Instantiate the appropriate loader for ``secret_origin``."""
 
@@ -44,6 +45,7 @@ def create_loader(
         return GCPSecretLoader(
             project_id=gcp_project_id,
             consolidated_secret=consolidated_secret,
+            timeout=gcp_timeout,
         )
 
     raise ValueError(

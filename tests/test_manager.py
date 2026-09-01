@@ -278,13 +278,14 @@ def test_old_format_encrypted_dotenv_top_level(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(not ECIES_AVAILABLE, reason="eciespy not installed")
-def test_custom_private_key_source_used(tmp_path, monkeypatch):
+def test_custom_private_key_source_used(
+    tmp_path, monkeypatch, encrypted_fixture_dir, ephemeral_keys
+):
     """Custom private_key.source name is resolved from environment."""
     import shutil
 
-    fixtures = Path(__file__).resolve().parent / "fixtures"
-    env_src = fixtures / ".env.encrypted"
-    shutil.copy(env_src, tmp_path / ".env.staging")
+    private_key_hex, _ = ephemeral_keys
+    shutil.copy(encrypted_fixture_dir / ".env.encrypted", tmp_path / ".env.staging")
     yaml_text = """\
     environments:
       staging:
@@ -302,10 +303,7 @@ def test_custom_private_key_source_used(tmp_path, monkeypatch):
     """
     config_path = write_config(tmp_path, yaml_text)
     monkeypatch.setenv("APP_ENV", "staging")
-    monkeypatch.setenv(
-        "MY_DECRYPT_KEY",
-        "81dac4d2c42e67a2c6542d3b943a4674a05c4be5e7e5a40a689be7a3bd49a07e",
-    )
+    monkeypatch.setenv("MY_DECRYPT_KEY", private_key_hex)
     monkeypatch.chdir(tmp_path)
     cm = ConfigManager(str(config_path), auto_load=True)
     assert cm.get("HELLO") == "world"
@@ -317,17 +315,18 @@ def test_custom_private_key_source_used(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(not ECIES_AVAILABLE, reason="eciespy not installed")
-def test_shared_dotenv_path_different_env_name_separate_loaders(tmp_path, monkeypatch):
+def test_shared_dotenv_path_different_env_name_separate_loaders(
+    tmp_path, monkeypatch, encrypted_fixture_dir, ephemeral_keys
+):
     """Two environments sharing a dotenv_path but different environment_name
     must produce separate loaders so the correct DOTENV_PRIVATE_KEY_<ENV>
     suffix is tried for each. Regression test for cache_key omitting
     environment_name."""
     import shutil
 
-    fixtures = Path(__file__).resolve().parent / "fixtures"
-    env_src = fixtures / ".env.encrypted"
+    private_key_hex, _ = ephemeral_keys
     # Both environments point to the same dotenv file
-    shutil.copy(env_src, tmp_path / ".env.shared")
+    shutil.copy(encrypted_fixture_dir / ".env.encrypted", tmp_path / ".env.shared")
     yaml_text = """\
     environments:
       alpha:
@@ -348,13 +347,45 @@ def test_shared_dotenv_path_different_env_name_separate_loaders(tmp_path, monkey
     config_path = write_config(tmp_path, yaml_text)
     monkeypatch.setenv("APP_ENV", "beta")
     # Set env-specific key for beta only
-    monkeypatch.setenv(
-        "DOTENV_PRIVATE_KEY_BETA",
-        "81dac4d2c42e67a2c6542d3b943a4674a05c4be5e7e5a40a689be7a3bd49a07e",
-    )
+    monkeypatch.setenv("DOTENV_PRIVATE_KEY_BETA", private_key_hex)
     monkeypatch.delenv("DOTENV_PRIVATE_KEY", raising=False)
     monkeypatch.delenv("DOTENV_PRIVATE_KEY_ALPHA", raising=False)
     monkeypatch.chdir(tmp_path)
     cm = ConfigManager(str(config_path), auto_load=True)
     # beta should decrypt successfully using DOTENV_PRIVATE_KEY_BETA
     assert cm.get("HELLO") == "world"
+
+
+# ---------------------------------------------------------------------------
+# D11: clave con la que se exporta a os.environ
+# ---------------------------------------------------------------------------
+
+
+def test_exports_using_the_variable_name_not_its_source(tmp_path, monkeypatch):
+    """El nombre de la variable es el contrato con el mundo exterior.
+
+    Un config que declara ``PGHOST`` con ``source: JUAN_DB_HOST`` quiere que
+    libpq encuentre ``PGHOST``. Espejo del test D11 en el repo JS, que hasta
+    la 0.3.0 exportaba bajo el ``source`` y dejaba ``PGHOST`` sin definir.
+    """
+    yaml_text = """\
+    variables:
+      PGHOST:
+        source: JUAN_DB_HOST
+        type: str
+    """
+    config_path = write_config(tmp_path, yaml_text)
+    (tmp_path / ".env").write_text("JUAN_DB_HOST=db.internal\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    cm = ConfigManager(str(config_path), auto_load=True)
+
+    assert cm.get("PGHOST") == "db.internal"
+    assert os.environ["PGHOST"] == "db.internal"
+
+    # Python nunca exportó bajo el `source`, así que tampoco lo hace ahora: el
+    # alias transitorio existe solo en JS, para no romper a quien dependa de su
+    # conducta vieja. Se elimina en la release siguiente. Ver PARITY.md, D11.
+    assert "JUAN_DB_HOST" not in os.environ
+
+    os.environ.pop("PGHOST", None)

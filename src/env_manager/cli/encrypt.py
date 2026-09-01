@@ -66,6 +66,13 @@ def encrypt_dotenv_file(
     FileExistsError
         If .env.keys already exists and force is False.
     """
+    # Primero lo que no depende de extras: si el archivo no está, el error es el
+    # mismo tenga o no instalado eciespy. Así el exit code es estable entre
+    # entornos y entre runtimes.
+    env_path = Path(file_path)
+    if not env_path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+
     # -- import eciespy lazily for helpful error when [encrypted] extra missing --
     try:
         from coincurve import PrivateKey
@@ -73,12 +80,8 @@ def encrypt_dotenv_file(
     except ImportError:
         raise ImportError(
             "eciespy is required for the encrypt command. "
-            "Install it with: pip install env-manager[encrypted]"
+            "Install it with: pip install notoriosti-env-manager[encrypted]"
         )
-
-    env_path = Path(file_path)
-    if not env_path.exists():
-        raise FileNotFoundError(f"File not found: {file_path}")
 
     out_path = Path(output_path) if output_path else env_path
     keys_path = out_path.parent / ".env.keys"
@@ -136,43 +139,23 @@ def encrypt_dotenv_file(
 
 
 def main() -> None:
-    """CLI entry point for env-manager-encrypt."""
-    import argparse
+    """Alias deprecado de ``env-manager encrypt``.
+
+    Se mantiene una versión para no romper a los consumidores que ya invocan
+    ``env-manager-encrypt``. Avisa por stderr y delega en el dispatcher, así el
+    comportamiento y los exit codes son exactamente los mismos.
+    """
+
     import sys
 
-    parser = argparse.ArgumentParser(
-        prog="env-manager-encrypt",
-        description="Encrypt a .env file using dotenvx-compatible ECIES encryption.",
-    )
-    parser.add_argument("file", help="Path to the .env file to encrypt")
-    parser.add_argument(
-        "-o", "--output",
-        default=None,
-        metavar="OUTPUT",
-        help="Write encrypted output to this path instead of modifying the input file in-place",
-    )
-    parser.add_argument(
-        "--env",
-        default=None,
-        help="Environment name (writes DOTENV_PRIVATE_KEY_<NAME> in .env.keys)",
-    )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Overwrite existing .env.keys file",
-    )
-    args = parser.parse_args()
+    from env_manager.cli.main import main as dispatch
 
-    try:
-        encrypt_dotenv_file(args.file, output_path=args.output, env_name=args.env, force=args.force)
-    except (FileNotFoundError, FileExistsError, ValueError, ImportError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    out = args.output or args.file
-    print(f"Encrypted {args.file} -> {out}")
-    keys_path = Path(out).parent / ".env.keys"
-    print(f"Private key written to {keys_path}")
+    print(
+        "Warning: 'env-manager-encrypt' is deprecated and will be removed in the "
+        "next release. Use 'env-manager encrypt' instead.",
+        file=sys.stderr,
+    )
+    dispatch(["encrypt", *sys.argv[1:]])
 
 
 if __name__ == "__main__":

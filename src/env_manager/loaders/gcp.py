@@ -3,14 +3,74 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Optional
 
 from google.api_core import exceptions as gcp_exceptions
+from google.api_core import retry as gcp_retry
 from google.cloud import secretmanager
 
 from env_manager.base import SecretLoader
 
 from env_manager.utils import logger
+
+#: Timeout por llamada a GSM, en segundos. Blueprint §1.5.3: todo proceso remoto
+#: tiene timeout. Nunca se deja el default de la librería cliente.
+DEFAULT_GCP_TIMEOUT = 10.0
+
+#: Tope de reintentos. §1.5.3: todo reintento tiene tope.
+MAX_RETRY_ATTEMPTS = 3
+
+#: §1.5.4: solo lo transitorio se reintenta. Un `PermissionDenied` o un
+#: `InvalidArgument` es determinista: reintentarlo quema tiempo para morir igual.
+TRANSIENT_ERRORS = (
+    gcp_exceptions.ServiceUnavailable,
+    gcp_exceptions.DeadlineExceeded,
+    gcp_exceptions.TooManyRequests,
+    gcp_exceptions.InternalServerError,
+    gcp_exceptions.Aborted,
+)
+
+#: Errores deterministas: se reportan de inmediato, sin reintento.
+DETERMINISTIC_ERRORS = (
+    gcp_exceptions.PermissionDenied,
+    gcp_exceptions.Unauthenticated,
+    gcp_exceptions.InvalidArgument,
+    gcp_exceptions.FailedPrecondition,
+)
+
+
+def _resolve_timeout(provided: Optional[float]) -> float:
+    """Resolve the per-call GSM timeout: argumento > env var > default."""
+
+    if provided is not None:
+        return float(provided)
+
+    raw = os.getenv("ENV_MANAGER_GCP_TIMEOUT")
+    if raw:
+        try:
+            value = float(raw)
+        except ValueError:
+            logger.warning(
+                f"ENV_MANAGER_GCP_TIMEOUT='{raw}' is not a number; "
+                f"falling back to {DEFAULT_GCP_TIMEOUT}s."
+            )
+            return DEFAULT_GCP_TIMEOUT
+        if value <= 0:
+            logger.warning(
+                f"ENV_MANAGER_GCP_TIMEOUT='{raw}' must be positive; "
+                f"falling back to {DEFAULT_GCP_TIMEOUT}s."
+            )
+            return DEFAULT_GCP_TIMEOUT
+        return value
+
+    return DEFAULT_GCP_TIMEOUT
+
+
+def _is_transient(exc: Exception) -> bool:
+    """Predicate for the retry policy: only transient failures are retried."""
+
+    return isinstance(exc, TRANSIENT_ERRORS)
 
 
 class GCPSecretLoader(SecretLoader):
@@ -23,7 +83,10 @@ class GCPSecretLoader(SecretLoader):
     """
 
     def __init__(
-        self, project_id: str, consolidated_secret: Optional[str] = None
+        self,
+        project_id: str,
+        consolidated_secret: Optional[str] = None,
+        timeout: Optional[float] = None,
     ) -> None:
         if not project_id:
             raise ValueError(
@@ -34,6 +97,20 @@ class GCPSecretLoader(SecretLoader):
         self._cache: dict[str, Optional[str]] = {}
         self._consolidated_secret = consolidated_secret
         self._consolidated_loaded = False
+        self._timeout = _resolve_timeout(timeout)
+        self._retry = gcp_retry.Retry(
+            predicate=_is_transient,
+            initial=0.5,
+            maximum=4.0,
+            multiplier=2.0,
+            timeout=self._timeout * MAX_RETRY_ATTEMPTS,
+        )
+
+    @property
+    def timeout(self) -> float:
+        """Per-call timeout applied to every Secret Manager request."""
+
+        return self._timeout
 
     def _secret_resource(self, secret_name: str) -> str:
         return f"projects/{self._project_id}/secrets/{secret_name}/versions/latest"
@@ -43,20 +120,30 @@ class GCPSecretLoader(SecretLoader):
         name = self._secret_resource(key)
 
         try:
-            response = self._client.access_secret_version(name=name)
+            response = self._client.access_secret_version(
+                name=name, timeout=self._timeout, retry=self._retry
+            )
         except gcp_exceptions.NotFound:
             logger.warning(
                 f"Secret '{key}' not found in GCP project '{self._project_id}'."
             )
             return None
+        except DETERMINISTIC_ERRORS as exc:
+            # §1.5.4: determinista. No se reintenta y se dice por qué.
+            raise RuntimeError(
+                f"Deterministic failure accessing secret '{key}' in GCP project "
+                f"'{self._project_id}': {type(exc).__name__}: {exc}. "
+                "Retrying will not help; check IAM permissions, credentials "
+                "and the secret name."
+            ) from exc
+        except gcp_exceptions.RetryError as exc:
+            raise RuntimeError(
+                f"Retries exhausted after {self._timeout * MAX_RETRY_ATTEMPTS:.1f}s "
+                f"accessing secret '{key}' in GCP project '{self._project_id}': {exc}"
+            ) from exc
         except gcp_exceptions.GoogleAPICallError as exc:
             raise RuntimeError(
                 "Failed to access secret "
-                f"'{key}' in GCP project '{self._project_id}': {exc}"
-            ) from exc
-        except gcp_exceptions.RetryError as exc:  # pragma: no cover - seldom triggered
-            raise RuntimeError(
-                "Retry exhausted when accessing secret "
                 f"'{key}' in GCP project '{self._project_id}': {exc}"
             ) from exc
 

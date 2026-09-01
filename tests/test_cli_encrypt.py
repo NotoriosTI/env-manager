@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 from dotenv import dotenv_values
+
+from env_manager.cli import exit_codes
 from ecies import decrypt as ecies_decrypt
 
 from env_manager.cli.encrypt import encrypt_dotenv_file
@@ -201,7 +203,10 @@ class TestCLIEntryPoint:
             capture_output=True, text=True, timeout=30,
         )
         assert result.returncode == 0
-        assert "env-manager-encrypt" in result.stdout
+        # El alias deprecado delega en `env-manager encrypt`, así que la ayuda
+        # que se imprime es la del subcomando.
+        assert "env-manager encrypt" in result.stdout
+        assert "deprecated" in result.stderr
 
     def test_script_invocation_help(self):
         result = subprocess.run(
@@ -210,6 +215,25 @@ class TestCLIEntryPoint:
         )
         assert result.returncode == 0
         assert "--force" in result.stdout
+
+    def test_unified_entry_point_help(self):
+        result = subprocess.run(
+            ["uv", "run", "env-manager", "encrypt", "--help"],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0
+        assert "--force" in result.stdout
+
+    def test_unified_entry_point_encrypts_file(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("MY_SECRET=hello\n")
+        result = subprocess.run(
+            ["uv", "run", "env-manager", "encrypt", str(env_file)],
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0
+        values = dotenv_values(str(env_file))
+        assert values["MY_SECRET"].startswith("encrypted:")
 
     def test_cli_encrypts_file(self, tmp_path):
         env_file = tmp_path / ".env"
@@ -233,5 +257,6 @@ class TestCLIEntryPoint:
             ["uv", "run", "env-manager-encrypt", str(env_file)],
             capture_output=True, text=True, timeout=30,
         )
-        assert result.returncode == 1
+        # §1.7: error de operación, no de uso. Ver PARITY.md.
+        assert result.returncode == exit_codes.OPERATION
         assert "already exists" in result.stderr
