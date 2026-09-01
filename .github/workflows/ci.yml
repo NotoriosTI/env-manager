@@ -1,0 +1,112 @@
+# CI de env-manager (Python).
+#
+# Blueprint §1.6.1: el repo es público, así que los minutos no se facturan —
+# pero igual se pone techo a todo (§1.5.3) y se cancelan los runs que quedaron
+# atrás (§1.5.2: no se paga por esperar algo que ya no importa).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Un PR que recibe tres pushes seguidos deja corriendo un solo run, el último.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: pytest (py${{ matrix.python }}${{ matrix.extra && ' + encrypted' || ', core only' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Piso declarado en requires-python.
+          - python: '3.12'
+            extra: true
+          # Techo del extra `encrypted` y versión del venv de desarrollo.
+          - python: '3.13'
+            extra: true
+          # El core corre en 3.14; el extra no, porque coincurve no publica
+          # wheel para cp314. Esta entrada existe para que ese límite sea
+          # ejecutable y no solo una nota en el README (§1.5.7).
+          - python: '3.14'
+            extra: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install dependencies
+        run: |
+          if [ "${{ matrix.extra }}" = "true" ]; then
+            uv sync --extra encrypted
+          else
+            uv sync
+          fi
+
+      - name: Run tests
+        run: |
+          if [ "${{ matrix.extra }}" = "true" ]; then
+            uv run pytest -q
+          else
+            # Sin el extra, los tests de dotenv cifrado no se pueden ni
+            # recolectar. Se excluyen a propósito y de forma visible.
+            uv run pytest -q \
+              --ignore=tests/test_cli_encrypt.py \
+              --ignore=tests/test_encrypted_dotenv.py
+          fi
+
+  parity:
+    name: Gate de paridad py <-> js
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Solo en push a main, no en PRs. El job hace checkout del repo hermano en
+    # su rama main, y el gate compara `main` contra `main`: en un PR el hermano
+    # todavía no tiene los cambios de este lado, así que el resultado no diría
+    # nada útil. El gate obligatorio antes de abrir un PR es el script local
+    # `scripts/parity-check.sh`, como exige PARITY.md.
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout env-manager
+        uses: actions/checkout@v4
+        with:
+          path: env-manager
+
+      - name: Checkout env-manager-js
+        uses: actions/checkout@v4
+        with:
+          repository: NotoriosTI/env-manager-js
+          path: env-manager-js
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: env-manager-js/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd env-manager && uv sync --extra encrypted
+          cd ../env-manager-js && npm ci
+
+      - name: Run the parity gate
+        env:
+          ENV_MANAGER_JS: ${{ github.workspace }}/env-manager-js
+          PYTHON_BIN: ${{ github.workspace }}/env-manager/.venv/bin/python
+        run: env-manager/scripts/parity-check.sh

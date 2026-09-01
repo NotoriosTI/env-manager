@@ -1,0 +1,55 @@
+# Fixture canónico de paridad py <-> js. NO editar sin actualizar expected.json
+# en AMBOS repos. Ver PARITY.md, sección "Fixture canónico".
+#
+# Cubre a propósito: alias de origin, los cuatro tipos, default presente y
+# ausente, coerción bool->str, required/optional, strict=false.
+environments:
+  local:
+    origin: dotenv          # alias de 'local' -- verifica ORIGIN_ALIASES
+    dotenv_path: parity.env
+    default: true
+
+variables:
+  APP_NAME:
+    source: APP_NAME
+    type: str
+
+  APP_PORT:
+    source: APP_PORT
+    type: int
+
+  APP_RATIO:
+    source: APP_RATIO
+    type: float
+
+  APP_DEBUG:
+    source: APP_DEBUG
+    type: bool
+
+  APP_FLAG_STR:
+    source: APP_FLAG_STR
+    type: str                # valor 'true' en el .env: NO debe volverse booleano
+
+  APP_TIMEOUT:
+    source: APP_TIMEOUT
+    type: int
+    default: 30              # presente en el .env: gana el .env
+
+  APP_RETRIES:
+    source: APP_RETRIES
+    type: int
+    default: 3               # ausente en el .env: gana el default
+
+  APP_LOG_LEVEL:
+    source: APP_LOG_LEVEL
+    type: str
+    default: "INFO"          # ausente en el .env: gana el default
+
+validation:
+  strict: false
+  required:
+    - APP_NAME
+    - APP_PORT
+  optional:
+    - APP_LOG_LEVEL
+    - APP_RETRIES

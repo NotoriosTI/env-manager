@@ -313,7 +313,7 @@ pytest -v
 pytest --cov=env_manager --cov-report=html
 ```
 
-El proyecto usa Python 3.13+, Poetry para gestión de dependencias y pytest para pruebas.
+El proyecto usa Python 3.12+, Poetry para gestión de dependencias y pytest para pruebas.
 
 
 ## Licencia

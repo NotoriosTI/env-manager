@@ -1,10 +1,13 @@
 [project]
 name = "notoriosti-env-manager"
-version = "0.3.0"
+version = "0.4.0"
 description = "Environment-aware configuration loader with GCP Secret Manager support"
 authors = [{ name = "Bastian Ibañez", email = "bastian.miba@gmail.com" }]
 readme = "README.md"
-requires-python = ">=3.13,<4.0"
+# Piso verificado corriendo la suite completa en 3.12 y 3.13 (205 passed en
+# ambos). El core también corre en 3.14; el extra `encrypted` no, porque
+# coincurve no publica wheel para cp314 — ver README y PARITY.md.
+requires-python = ">=3.12,<4.0"
 dependencies = [
   "python-dotenv>=1.0.0,<2.0.0",
   "pyyaml>=6.0.1,<7.0.0",
@@ -16,7 +19,12 @@ dependencies = [
 encrypted = ["eciespy>=0.4.6,<0.5.0"]
 
 [project.scripts]
+# Contrato §1.7: el comando visible lleva el nombre de la app y las acciones
+# son subcomandos. Los dos binarios con guion quedan como alias deprecados por
+# una versión; se eliminan en la siguiente.
+env-manager = "env_manager.cli.main:main"
 env-manager-encrypt = "env_manager.cli.encrypt:main"
+env-manager-decrypt = "env_manager.cli.decrypt_shim:main"
 
 [tool.poetry]
 packages = [{ include = "env_manager", from = "src" }]

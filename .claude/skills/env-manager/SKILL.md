@@ -407,12 +407,12 @@ If yes — replace each occurrence. If no — show the list so the user can migr
 
 **JS/TS:**
 ```bash
-npx env-manager-encrypt .env
+npx env-manager encrypt .env
 ```
 
 **Python:**
 ```bash
-env-manager-encrypt .env
+env-manager encrypt .env
 ```
 
 After running:
@@ -437,6 +437,28 @@ Ask: "What is your GCP project ID?"
 
 Update `config.yaml` to replace `YOUR_GCP_PROJECT_ID` with the provided value.
 
+### One consolidated secret per app
+
+Notorios apps do **not** create one GCP secret per variable. Each app has a
+single consolidated JSON secret named `<app>-config`, declared in the YAML:
+
+```yaml
+environments:
+  production:
+    origin: gcp
+    gcp_project_id: YOUR_GCP_PROJECT_ID
+    consolidated_secret: myapp-config
+```
+
+At boot env-manager reads that one secret, parses the JSON object and preloads
+every value into memory — one Secret Manager call instead of one per key. Keys
+missing from the payload still fall back to individual secret lookups, so
+migrating is safe. The same key works as the `CONSOLIDATED_SECRET` env var.
+
+Why: Secret Manager bills per enabled version (~$0.06/month each). One secret
+with one live version is the cheapest shape, and reading once at boot keeps the
+call count flat no matter how many variables the app has.
+
 Then show:
 ```
 Grant Secret Manager access to your service account:
@@ -445,15 +467,27 @@ Grant Secret Manager access to your service account:
     --member="serviceAccount:YOUR_SA@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com" \
     --role="roles/secretmanager.secretAccessor"
 
-To push a secret to GCP:
+Create the consolidated secret ONCE, empty, by hand:
+
+  echo -n '{}' | \
+    gcloud secrets create myapp-config --data-file=- --project=YOUR_GCP_PROJECT_ID
+
+From then on, set keys with env-manager — never with `gcloud secrets versions
+add`, which leaves the old version enabled and billable:
 
   echo -n "my-secret-value" | \
-    gcloud secrets create MY_KEY --data-file=- --project=YOUR_GCP_PROJECT_ID
-  
-  # Or update existing:
-  echo -n "my-secret-value" | \
-    gcloud secrets versions add MY_KEY --data-file=- --project=YOUR_GCP_PROJECT_ID
+    env-manager secrets set myapp-config --key MY_KEY --project YOUR_GCP_PROJECT_ID
+
+  env-manager secrets list myapp-config --project YOUR_GCP_PROJECT_ID
 ```
+
+`env-manager secrets set` adds the new version, verifies it reads back, and only
+then destroys the previous ones. The value is read from stdin — never pass it as
+an argument, where it lands in `ps` and in shell history. `secrets list` prints
+key names only, never values.
+
+**Never fill a secret's value on the user's behalf.** New secrets are created
+empty and the person who owns them types the value in.
 
 ---
 
@@ -542,7 +576,7 @@ For each environment with type `local_encrypted`:
 grep -q "^DOTENV_PUBLIC_KEY=" <dotenv_path> && echo "encrypted" || echo "plaintext"
 ```
 - `encrypted` → PASS (file has been encrypted; safe to commit)
-- `plaintext` → FAIL: "`.env` is configured as encrypted but contains plaintext values — run `env-manager-encrypt <dotenv_path>` first"
+- `plaintext` → FAIL: "`.env` is configured as encrypted but contains plaintext values — run `env-manager encrypt <dotenv_path>` first"
 
 ### Step 8.3 — Check .env.keys
 
@@ -568,7 +602,7 @@ Security Verification
 .env.keys                  [PASS] not tracked, gitignored
 .env          (local)      [PASS] not tracked, gitignored
 .env.staging  (encrypted)  [PASS] DOTENV_PUBLIC_KEY present
-.env          (encrypted)  [FAIL] plaintext values found — run env-manager-encrypt .env
+.env          (encrypted)  [FAIL] plaintext values found — run env-manager encrypt .env
 ```
 
 For each FAIL, show the exact fix command.
@@ -642,16 +676,30 @@ secret = require_config("JWT_SECRET") # raises if missing
 
 ## Reference: CLI Commands
 
-**JS/TS:**
+One binary per runtime, named after the app, with actions as subcommands. The
+old `env-manager-encrypt` / `env-manager-decrypt` binaries still work for one
+more release: they print a deprecation warning to stderr and delegate here.
+
+**JS/TS** (prefix with `npx`) **and Python** — same surface, same flags, same
+exit codes:
+
 ```bash
-npx env-manager-encrypt .env              # encrypt .env → .env (in-place), keys → .env.keys
-npx env-manager-encrypt .env --env prod  # encrypt into named environment slot
-npx env-manager-encrypt .env --force     # overwrite existing encrypted file
+env-manager encrypt <file> [--env NAME] [--force] [-o OUT] [--format text|json]
+env-manager decrypt <file> [--env NAME] [--key HEX] [-o OUT] [--format text|json]
+
+env-manager secrets list <secret> --project PROJECT [--format text|json]
+echo -n "value" | env-manager secrets set <secret> --key KEY --project PROJECT
+
+env-manager --version
+env-manager --help
 ```
 
-**Python:**
-```bash
-env-manager-encrypt .env
-env-manager-encrypt .env --env prod
-env-manager-encrypt .env --force
-```
+Results go to stdout, diagnostics to stderr. Exit codes:
+
+| code | meaning |
+|---|---|
+| 0 | success |
+| 1 | usage error (missing argument, unknown action, bad flag) |
+| 2 | operation error (file missing, already encrypted, decryption failed) |
+| 3 | missing optional dependency (the `encrypted` extra) |
+| 4 | Secret Manager failure |

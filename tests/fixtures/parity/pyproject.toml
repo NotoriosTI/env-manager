@@ -1,0 +1,6 @@
+# Ancla de descubrimiento de project root para el runtime Python.
+# Existe solo para que `dotenv_path: parity.env` resuelva dentro de esta
+# carpeta y no en la raíz del repo. No es un paquete instalable.
+[project]
+name = "env-manager-parity-fixture"
+version = "0.0.0"

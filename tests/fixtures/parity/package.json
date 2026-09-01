@@ -1,0 +1,6 @@
+{
+  "//": "Ancla de descubrimiento de project root para el runtime JS. Existe solo para que dotenv_path: parity.env resuelva dentro de esta carpeta. No es un paquete publicable.",
+  "name": "env-manager-parity-fixture",
+  "version": "0.0.0",
+  "private": true
+}

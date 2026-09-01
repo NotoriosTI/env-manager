@@ -690,6 +690,17 @@ def init_config(
     return _SINGLETON
 
 
+def _reset_singleton() -> None:
+    """Drop the global manager instance.
+
+    Parity with the JS runtime (``_resetSingleton``): tests need a way to start
+    from a clean slate without reaching into module internals.
+    """
+
+    global _SINGLETON
+    _SINGLETON = None
+
+
 def get_config(key: str, default: Any = None) -> Any:
     """Retrieve a configuration value from the singleton manager."""
 
