@@ -25,29 +25,44 @@ SECRET = "app-config"
 class FakeClient:
     """Cliente de GSM en memoria: versiones numeradas y estado por versión."""
 
-    def __init__(self, payload="{}", *, versions=("1",), missing=False):
+    def __init__(
+        self,
+        payload="{}",
+        *,
+        versions=("1",),
+        missing=False,
+        latest_error=None,
+    ):
         self.missing = missing
+        self.latest_error = latest_error
         self.payloads = {v: payload for v in versions}
         self.states = {v: "ENABLED" for v in versions}
         self.destroy_error = None
         self.added = []
         self.destroyed = []
+        self.events = []
 
     # -- lectura -------------------------------------------------------------
     def _version_id(self, name):
         return name.rsplit("/", 1)[-1]
 
     def access_secret_version(self, name):
+        self.events.append(("access", name))
         if self.missing:
             raise gcp_exceptions.NotFound("no such secret")
         version = self._version_id(name)
         if version == "latest":
+            if self.latest_error is not None:
+                raise self.latest_error
             version = max(self.payloads, key=int)
         return SimpleNamespace(
             payload=SimpleNamespace(data=self.payloads[version].encode("utf-8"))
         )
 
     def list_secret_versions(self, parent):
+        self.events.append(("list", parent))
+        if self.missing:
+            raise gcp_exceptions.NotFound("no such secret")
         return [
             SimpleNamespace(
                 name=f"{parent}/versions/{v}",
@@ -58,6 +73,7 @@ class FakeClient:
 
     # -- escritura -----------------------------------------------------------
     def add_secret_version(self, parent, payload):
+        self.events.append(("add", parent))
         new_id = str(max((int(v) for v in self.payloads), default=0) + 1)
         self.payloads[new_id] = payload["data"].decode("utf-8")
         self.states[new_id] = "ENABLED"
@@ -66,6 +82,7 @@ class FakeClient:
         return SimpleNamespace(name=name)
 
     def destroy_secret_version(self, name):
+        self.events.append(("destroy", name))
         if self.destroy_error is not None:
             raise self.destroy_error
         self.states[self._version_id(name)] = "DESTROYED"
@@ -111,6 +128,49 @@ class TestSetKey:
 
         assert len(result["destroyed_versions"]) == 3
         assert [v for v, s in client.states.items() if s == "ENABLED"] == ["4"]
+
+    def test_destroys_enabled_and_disabled_but_ignores_destroyed_versions(self):
+        client = FakeClient(json.dumps({"A": "1"}), versions=("1", "2", "3"))
+        client.states.update({"1": "DESTROYED", "2": "DISABLED", "3": "ENABLED"})
+
+        result = set_key(PROJECT, SECRET, "B", "2", client=client)
+
+        assert result["destroyed_versions"] == [
+            f"projects/{PROJECT}/secrets/{SECRET}/versions/3",
+            f"projects/{PROJECT}/secrets/{SECRET}/versions/2",
+        ]
+        assert client.states["1"] == "DESTROYED"
+
+    def test_snapshots_versions_before_reading_latest(self):
+        client = FakeClient(json.dumps({"A": "1"}), versions=("1",))
+
+        set_key(PROJECT, SECRET, "B", "2", client=client)
+
+        assert [event[0] for event in client.events[:2]] == ["list", "access"]
+
+    def test_existing_secret_without_versions_creates_the_first_version(self):
+        client = FakeClient(versions=())
+
+        result = set_key(PROJECT, SECRET, "A", "1", client=client)
+
+        assert result["created_version"].endswith("/versions/1")
+        assert result["destroyed_versions"] == []
+        assert json.loads(client.payloads["1"]) == {"A": "1"}
+        assert all(
+            not (kind == "access" and name.endswith("/versions/latest"))
+            for kind, name in client.events
+        )
+
+    def test_existing_secret_with_inaccessible_latest_is_a_distinct_error(self):
+        client = FakeClient(
+            versions=("1",),
+            latest_error=gcp_exceptions.NotFound("latest is unavailable"),
+        )
+
+        with pytest.raises(SecretsError, match="exists.*latest version could not be read"):
+            set_key(PROJECT, SECRET, "A", "1", client=client)
+
+        assert client.added == []
 
     def test_a_failed_destroy_names_the_dangling_version(self):
         client = FakeClient(json.dumps({"A": "1"}), versions=("1",))
@@ -180,3 +240,7 @@ class TestStdin:
     def test_empty_stdin_is_an_error(self):
         with pytest.raises(SecretsError, match="No value provided"):
             read_value_from_stdin([])
+
+    @pytest.mark.parametrize("stream", [[], ["\n"]])
+    def test_allow_empty_accepts_zero_bytes_or_one_newline(self, stream):
+        assert read_value_from_stdin(stream, allow_empty=True) == ""

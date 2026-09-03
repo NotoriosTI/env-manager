@@ -1,16 +1,18 @@
 # Example configuration for env-manager
 # Copy to config_vars.yaml and customize
 
-# Optional: define named environments (selected at runtime via ENVIRONMENT env var)
+# Optional: define named environments (selected at runtime via APP_ENV env var)
 # Remove this section if you don't need multi-environment support
 environments:
   production:
     origin: gcp
     gcp_project_id: my-gcp-project
+    # consolidated_secret: my-app-config
+    # fallback_to_individual: false  # require every key to be in the JSON payload
   local:
     origin: local
     dotenv_path: .env
-    default: true   # Used when ENVIRONMENT is not set
+    default: true   # Used when APP_ENV is not set
 
 variables:
   # Database credentials

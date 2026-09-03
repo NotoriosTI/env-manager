@@ -9,7 +9,13 @@ from typing import Any, Optional
 
 from dotenv import dotenv_values, find_dotenv
 
-from env_manager.environment import EncryptedDotenvConfig, EnvironmentConfig, PrivateKeyConfig, parse_environments
+from env_manager.environment import (
+    ORIGIN_ALIASES,
+    EncryptedDotenvConfig,
+    EnvironmentConfig,
+    PrivateKeyConfig,
+    parse_environments,
+)
 from env_manager.factory import create_loader
 from env_manager.utils import coerce_type, load_yaml, logger, mask_secret
 
@@ -27,6 +33,7 @@ class SourceContext:
     dotenv_path: Optional[str]
     gcp_project_id: Optional[str]
     consolidated_secret: Optional[str] = None
+    fallback_to_individual: bool = True
 
 
 class ConfigManager:
@@ -43,6 +50,7 @@ class ConfigManager:
         dotenv_path: Optional[str] = None,
         debug: bool = False,
         consolidated_secret: Optional[str] = None,
+        fallback_to_individual: Optional[bool] = None,
     ) -> None:
         self._config_path = Path(config_path).expanduser().resolve()
         self._project_root = self._discover_project_root()
@@ -65,10 +73,21 @@ class ConfigManager:
         self.secret_origin = self._resolve_secret_origin(secret_origin)
         self.gcp_project_id = self._resolve_gcp_project_id(gcp_project_id)
         self.consolidated_secret = self._resolve_consolidated_secret(consolidated_secret)
+        self._fallback_to_individual_override = fallback_to_individual
+        self.fallback_to_individual = self._resolve_fallback_to_individual(
+            fallback_to_individual
+        )
+        if not self.fallback_to_individual and not self.consolidated_secret:
+            raise ValueError(
+                "fallback_to_individual=False requires a consolidated_secret."
+            )
         self.strict = self._resolve_strict(strict)
 
         self._loader: Optional[SecretLoader] = None
-        self._loaders: dict[tuple[str, Optional[str], Optional[str], Optional[str]], SecretLoader] = {}
+        self._loaders: dict[
+            tuple[str, Optional[str], Optional[str], Optional[str], Optional[str], bool],
+            SecretLoader,
+        ] = {}
         self._values: dict[str, Any] = {}
         self._loaded = False
         self._encrypted_enabled: bool = False
@@ -166,7 +185,8 @@ class ConfigManager:
             os.environ.setdefault("GCP_PROJECT_ID", gcp_id)
             return gcp_id
 
-        logger.warning("GCP_PROJECT_ID not set. Some features may not work.")
+        if ORIGIN_ALIASES.get(self.secret_origin, self.secret_origin) == "gcp":
+            logger.warning("GCP_PROJECT_ID not set. Some features may not work.")
         return None
 
     def _resolve_consolidated_secret(self, provided: Optional[str]) -> Optional[str]:
@@ -185,6 +205,15 @@ class ConfigManager:
             return self._active_environment.consolidated_secret
 
         return None
+
+    def _resolve_fallback_to_individual(self, provided: Optional[bool]) -> bool:
+        if provided is not None:
+            if not isinstance(provided, bool):
+                raise ValueError("fallback_to_individual must be a boolean.")
+            return provided
+        if self._active_environment:
+            return self._active_environment.fallback_to_individual
+        return True
 
     def _resolve_strict(self, provided: Optional[bool]) -> bool:
         if provided is not None:
@@ -259,6 +288,7 @@ class ConfigManager:
             context.dotenv_path,
             context.environment_name,
             context.consolidated_secret,
+            context.fallback_to_individual,
         )
         loader = self._loaders.get(cache_key)
         if loader is None:
@@ -276,6 +306,7 @@ class ConfigManager:
                 environment_name=context.environment_name,
                 explicit_private_key=self._explicit_private_key,
                 consolidated_secret=context.consolidated_secret,
+                fallback_to_individual=context.fallback_to_individual,
             )
             self._loaders[cache_key] = loader
         return loader
@@ -289,6 +320,7 @@ class ConfigManager:
             dotenv_path=self._dotenv_path,
             gcp_project_id=self.gcp_project_id,
             consolidated_secret=self.consolidated_secret,
+            fallback_to_individual=self.fallback_to_individual,
         )
 
     def _resolve_encrypted_dotenv_config(self) -> tuple[bool, Optional[str]]:
@@ -341,6 +373,11 @@ class ConfigManager:
             dotenv_path=self._resolve_environment_dotenv_path(environment),
             gcp_project_id=environment.gcp_project_id,
             consolidated_secret=environment.consolidated_secret,
+            fallback_to_individual=(
+                self._fallback_to_individual_override
+                if self._fallback_to_individual_override is not None
+                else environment.fallback_to_individual
+            ),
         )
 
     def _effective_source_context(
@@ -366,6 +403,7 @@ class ConfigManager:
                 dotenv_path=dotenv_path,
                 gcp_project_id=context.gcp_project_id,
                 consolidated_secret=context.consolidated_secret,
+                fallback_to_individual=context.fallback_to_individual,
             )
 
         dotenv_override = definition.get("dotenv_path")
@@ -380,6 +418,7 @@ class ConfigManager:
                 dotenv_path=self._resolve_project_path(dotenv_override),
                 gcp_project_id=context.gcp_project_id,
                 consolidated_secret=context.consolidated_secret,
+                fallback_to_individual=context.fallback_to_individual,
             )
 
         return context
@@ -410,7 +449,15 @@ class ConfigManager:
 
         fetched: dict[str, Optional[str]] = {}
         variables_needing_lookup: dict[
-            tuple[str, Optional[str], Optional[str], str], list[str]
+            tuple[
+                str,
+                Optional[str],
+                Optional[str],
+                str,
+                Optional[str],
+                bool,
+            ],
+            list[str],
         ] = {}
         for name in sourced_variables:
             if name in os.environ:
@@ -422,6 +469,8 @@ class ConfigManager:
                 context.gcp_project_id,
                 context.dotenv_path,
                 context.environment_name,
+                context.consolidated_secret,
+                context.fallback_to_individual,
             )
             variables_needing_lookup.setdefault(group_key, []).append(name)
 
@@ -669,6 +718,7 @@ def init_config(
     dotenv_path: Optional[str] = None,
     debug: bool = False,
     consolidated_secret: Optional[str] = None,
+    fallback_to_individual: Optional[bool] = None,
 ) -> ConfigManager:
     """Initialise the global configuration manager singleton."""
 
@@ -686,6 +736,7 @@ def init_config(
         dotenv_path=dotenv_path,
         debug=debug,
         consolidated_secret=consolidated_secret,
+        fallback_to_individual=fallback_to_individual,
     )
     return _SINGLETON
 

@@ -76,7 +76,7 @@ Tell the user:
 ```
 env-manager supports named environments (e.g. "local", "staging", "production").
 Each environment has its own secret source. The app picks the active one via the
-ENVIRONMENT env var at runtime.
+APP_ENV env var at runtime.
 
 Let's define your environments one at a time. You can add as many as you need.
 ```
@@ -109,7 +109,7 @@ Accept free-form answers and map them:
 
 **Ask if this is the default environment** (only for the first environment, or if none has been marked default yet):
 ```
-Should "[name]" be the default environment when ENVIRONMENT is not set? (yes / no)
+Should "[name]" be the default environment when APP_ENV is not set? (yes / no)
 ```
 
 **For `local` and `local_encrypted`: ask for dotenv path**

@@ -24,13 +24,19 @@ def prod_config(tmp_path: Path) -> Path:
 def test_production_like_flow(prod_config: Path):
     manager_module._SINGLETON = None  # ensure clean singleton state
 
-    if not os.getenv("RUN_REAL_GCP_TESTS"):
+    if os.getenv("RUN_REAL_GCP_TESTS") != "1":
         pytest.skip("Set RUN_REAL_GCP_TESTS=1 to run GCP integration test.")
+    project_id = os.getenv("ENV_MANAGER_ITEST_PROJECT", "").strip()
+    if not project_id:
+        pytest.skip(
+            "Set non-empty ENV_MANAGER_ITEST_PROJECT explicitly before running "
+            "the GCP integration test."
+        )
 
     gcp_manager = ConfigManager(
         str(prod_config),
         secret_origin="gcp",
-        gcp_project_id="notorios",
+        gcp_project_id=project_id,
     )
 
     required_keys = {
@@ -49,7 +55,7 @@ def test_production_like_flow(prod_config: Path):
     init_config(
         str(prod_config),
         secret_origin="gcp",
-        gcp_project_id="notorios",
+        gcp_project_id=project_id,
     )
     for key in required_keys:
         value = require_config(key)
@@ -153,7 +159,7 @@ validation:
 
     calls: list[tuple[str, str | None, str | None, tuple[str, ...]]] = []
 
-    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None, consolidated_secret=None):
+    def fake_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None, consolidated_secret=None, fallback_to_individual=True):
         calls.append((origin, gcp_project_id, dotenv_path, tuple()))
         if origin == "gcp":
             return FakeLoader({"projects/prod-123/secrets/GCP_SECRET": "from-gcp"})
@@ -161,7 +167,7 @@ validation:
 
     original_create_loader = manager_module.create_loader
 
-    def recording_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None, consolidated_secret=None):
+    def recording_create_loader(origin, *, gcp_project_id=None, dotenv_path=None, encrypted=False, environment_name=None, explicit_private_key=None, consolidated_secret=None, fallback_to_individual=True):
         if origin == "gcp":
             calls.append((origin, gcp_project_id, dotenv_path, ("projects/prod-123/secrets/GCP_SECRET",)))
             return FakeLoader({"projects/prod-123/secrets/GCP_SECRET": "from-gcp"})

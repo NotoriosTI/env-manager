@@ -41,6 +41,14 @@ class TestTimeoutResolution:
     def test_loader_exposes_timeout(self, loader):
         assert loader.timeout == DEFAULT_GCP_TIMEOUT
 
+    def test_positional_timeout_remains_backward_compatible(self):
+        with patch(
+            "env_manager.loaders.gcp.secretmanager.SecretManagerServiceClient"
+        ):
+            loader = GCPSecretLoader("proj", None, 2.5)
+
+        assert loader.timeout == 2.5
+
 
 class TestRetryPredicate:
     @pytest.mark.parametrize(

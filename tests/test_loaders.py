@@ -1,3 +1,6 @@
+import pytest
+
+from env_manager.factory import create_loader
 from env_manager.loaders import DotEnvLoader, GCPSecretLoader
 
 
@@ -55,3 +58,30 @@ def test_gcp_loader_handles_missing_secret(mocker, caplog):
         assert loader.get("MISSING") is None
 
     assert "Secret 'MISSING' not found in GCP project 'project-123'." in caplog.text
+
+
+def test_factory_propagates_individual_fallback_setting(mocker):
+    loader_class = mocker.patch("env_manager.factory.GCPSecretLoader")
+
+    create_loader(
+        "gcp",
+        gcp_project_id="project-123",
+        consolidated_secret="app-config",
+        fallback_to_individual=False,
+    )
+
+    loader_class.assert_called_once_with(
+        project_id="project-123",
+        consolidated_secret="app-config",
+        fallback_to_individual=False,
+        timeout=None,
+    )
+
+
+def test_factory_rejects_disabled_fallback_without_consolidated_secret():
+    with pytest.raises(ValueError, match="requires a consolidated_secret"):
+        create_loader(
+            "gcp",
+            gcp_project_id="project-123",
+            fallback_to_individual=False,
+        )

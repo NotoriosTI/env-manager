@@ -47,6 +47,7 @@ class EnvironmentConfig:
     is_default: bool = False
     encrypted_dotenv: Optional[EncryptedDotenvConfig] = None  # Phase 02 addition
     consolidated_secret: Optional[str] = None
+    fallback_to_individual: bool = True
 
 
 def parse_environments(
@@ -114,6 +115,13 @@ def parse_environments(
         dotenv_path: Optional[str] = None
         gcp_project_id: Optional[str] = None
         consolidated_secret: Optional[str] = None
+        raw_fallback = env_data.get("fallback_to_individual", True)
+        if not isinstance(raw_fallback, bool):
+            raise ValueError(
+                f"Environment '{env_name}': 'fallback_to_individual' must be "
+                "a boolean"
+            )
+        fallback_to_individual = raw_fallback
 
         if origin == "local":
             dotenv_path = env_data.get("dotenv_path", ".env")
@@ -133,6 +141,12 @@ def parse_environments(
                         "a non-empty string when provided"
                     )
                 consolidated_secret = raw_consolidated.strip()
+
+        if not fallback_to_individual and not consolidated_secret:
+            raise ValueError(
+                f"Environment '{env_name}': 'fallback_to_individual: false' "
+                "requires 'consolidated_secret'"
+            )
 
         is_default = bool(env_data.get("default", False))
 
@@ -164,6 +178,7 @@ def parse_environments(
             is_default=is_default,
             encrypted_dotenv=encrypted_dotenv,
             consolidated_secret=consolidated_secret,
+            fallback_to_individual=fallback_to_individual,
         )
 
     explicit_defaults = [name for name, cfg in result.items() if cfg.is_default]
