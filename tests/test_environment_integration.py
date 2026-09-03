@@ -18,7 +18,7 @@ from conftest import write_config, write_env
 
 
 class TestEnvironmentSelection:
-    """ENVIRONMENT env var selects the correct named environment."""
+    """APP_ENV env var selects the correct named environment."""
 
     YAML_WITH_ENVS = """\
     environments:
@@ -37,7 +37,7 @@ class TestEnvironmentSelection:
     """
 
     def test_environment_var_selects_staging(self, tmp_path, monkeypatch):
-        """ENVIRONMENT=staging selects staging config."""
+        """APP_ENV=staging selects staging config."""
         monkeypatch.setenv("APP_ENV", "staging")
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
         staging_env = tmp_path / ".env.staging"
@@ -51,7 +51,7 @@ class TestEnvironmentSelection:
         assert mgr.active_environment.dotenv_path == ".env.staging"
 
     def test_environment_unset_falls_back_to_default(self, tmp_path, monkeypatch):
-        """Omitting ENVIRONMENT falls back to default environment."""
+        """Omitting APP_ENV falls back to default environment."""
         monkeypatch.delenv("APP_ENV", raising=False)
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
         write_env(tmp_path)
@@ -62,7 +62,7 @@ class TestEnvironmentSelection:
         assert mgr.active_environment.name == "default"
 
     def test_undefined_environment_raises_value_error(self, tmp_path, monkeypatch):
-        """ENVIRONMENT=unknown raises ValueError with descriptive message."""
+        """APP_ENV=unknown raises ValueError with descriptive message."""
         monkeypatch.setenv("APP_ENV", "unknown")
         config_path = write_config(tmp_path, self.YAML_WITH_ENVS)
 
@@ -262,7 +262,7 @@ class TestEnvironmentSelection:
 
 
 class TestNoDefaultEnvironment:
-    """When ENVIRONMENT is unset and no default is defined."""
+    """When APP_ENV is unset and no default is defined."""
 
     YAML_NO_DEFAULT = """\
     environments:
@@ -468,7 +468,7 @@ class TestBackwardsCompatibility:
     def test_old_format_with_environment_var_set_does_not_raise(
         self, tmp_path, monkeypatch
     ):
-        """Old format: ENVIRONMENT env var is ignored when no environments dict exists."""
+        """Old format: APP_ENV env var is ignored when no environments dict exists."""
         monkeypatch.setenv("APP_ENV", "staging")
         config_path = write_config(
             tmp_path,

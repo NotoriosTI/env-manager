@@ -66,7 +66,7 @@ _SCRUB_ON_ENTRY = (
     "JUAN_DB_USER",
     "GCP_PROJECT_ID",
     "SECRET_ORIGIN",
-    "ENVIRONMENT",
+    "APP_ENV",
 )
 
 
@@ -209,7 +209,7 @@ def case_2_old_gcp(tmp: Path) -> dict[str, Any]:
 def case_3_new_gcp(tmp: Path) -> dict[str, Any]:
     cfg = tmp / "config.yaml"
     cfg.write_text((FIXTURES / "new_format.yaml").read_text(), encoding="utf-8")
-    os.environ["ENVIRONMENT"] = "gcp"
+    os.environ["APP_ENV"] = "gcp"
     mgr = ConfigManager(
         str(cfg), secret_origin="gcp", gcp_project_id=GCP_PROJECT_ID, debug=False
     )
@@ -221,7 +221,7 @@ def case_4_new_dotenv(tmp: Path) -> dict[str, Any]:
     env = tmp / ".env"
     cfg.write_text((FIXTURES / "new_format.yaml").read_text(), encoding="utf-8")
     env.write_text(_DOTENV_CONTENT, encoding="utf-8")
-    os.environ["ENVIRONMENT"] = "local"
+    os.environ["APP_ENV"] = "local"
     mgr = ConfigManager(
         str(cfg), secret_origin="local", dotenv_path=str(env), debug=True
     )

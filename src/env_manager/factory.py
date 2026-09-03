@@ -20,12 +20,20 @@ def create_loader(
     environment_name: Optional[str] = None,
     explicit_private_key: Optional[str] = None,
     consolidated_secret: Optional[str] = None,
+    fallback_to_individual: bool = True,
     gcp_timeout: Optional[float] = None,
 ) -> SecretLoader:
     """Instantiate the appropriate loader for ``secret_origin``."""
 
     origin = (secret_origin or "local").strip().lower()
     origin = ORIGIN_ALIASES.get(origin, origin)
+
+    if not isinstance(fallback_to_individual, bool):
+        raise ValueError("fallback_to_individual must be a boolean.")
+    if not fallback_to_individual and not consolidated_secret:
+        raise ValueError(
+            "fallback_to_individual=False requires a consolidated_secret."
+        )
 
     if origin == "local":
         logger.info("Loading secrets from .env")
@@ -45,6 +53,7 @@ def create_loader(
         return GCPSecretLoader(
             project_id=gcp_project_id,
             consolidated_secret=consolidated_secret,
+            fallback_to_individual=fallback_to_individual,
             timeout=gcp_timeout,
         )
 

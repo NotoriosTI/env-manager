@@ -56,7 +56,8 @@ Por defecto, los secretos se cargan desde archivos `.env`. Para usar Google Clou
 1. Parámetro explícito: `init_config(..., secret_origin="gcp")`
 2. Variable de entorno: `export SECRET_ORIGIN=gcp`
 3. Archivo `.env`: `SECRET_ORIGIN=gcp`
-4. Por defecto: `"local"`
+4. Campo `origin` del entorno activo
+5. Por defecto: `"local"`
 
 ## Archivo de Configuración
 
@@ -88,6 +89,24 @@ validation:
     - DEBUG_MODE     # Advertencia si falta
 ```
 
+Los entornos con nombre se seleccionan mediante `APP_ENV`:
+
+```yaml
+environments:
+  local:
+    origin: local
+    dotenv_path: .env
+    default: true
+  production:
+    origin: gcp
+    gcp_project_id: mi-proyecto
+    consolidated_secret: mi-app-config
+    fallback_to_individual: false
+```
+
+Si `APP_ENV` no está definido, se usa el entorno con `default: true` y luego
+el entorno llamado `default`.
+
 ### Reglas de Definición de Variables
 
 Cada variable debe tener **al menos uno** de:
@@ -117,6 +136,8 @@ init_config(
     "config/config_vars.yaml",
     secret_origin=None,      # "local" o "gcp" (auto-detectado si es None)
     gcp_project_id=None,     # Requerido si secret_origin="gcp"
+    consolidated_secret=None,
+    fallback_to_individual=None,  # Valor del entorno YAML activo; si falta, true
     strict=None,             # Sobrescribe configuración strict del YAML
     dotenv_path=None,        # Ruta personalizada de .env (auto-detectado si es None)
     debug=False,             # Muestra secretos sin enmascarar en logs (NUNCA en producción)
@@ -142,6 +163,8 @@ manager = ConfigManager(
     "config/config_vars.yaml",
     secret_origin="gcp",
     gcp_project_id="my-project",
+    consolidated_secret="my-app-config",
+    fallback_to_individual=False,
     auto_load=True,
 )
 
@@ -212,7 +235,13 @@ El `SECRET_ORIGIN` determina de dónde cargar los secretos:
 1. Parámetro explícito: `init_config(..., secret_origin="gcp")`
 2. Variable de entorno: `export SECRET_ORIGIN=gcp`
 3. Archivo `.env`: `SECRET_ORIGIN=gcp` (leído sin cargar todo el archivo)
-4. Por defecto: `"local"`
+4. Campo `origin` del entorno activo
+5. Por defecto: `"local"`
+
+> **Advertencia de precedencia:** `SECRET_ORIGIN`, `GCP_PROJECT_ID` y
+> `CONSOLIDATED_SECRET` definidos en el entorno del proceso o en `.env`
+> prevalecen sobre el YAML. Pueden redirigir la fuente efectiva sin que exista
+> un cambio en el repositorio.
 
 **Ejemplo:**
 ```bash
@@ -233,7 +262,42 @@ Al usar `secret_origin="gcp"`, el ID del proyecto GCP se resuelve con:
 1. Parámetro explícito: `init_config(..., gcp_project_id="my-project")`
 2. Variable de entorno: `export GCP_PROJECT_ID=my-project`
 3. Archivo `.env`: `GCP_PROJECT_ID=my-project`
-4. Sin establecer (se registra advertencia)
+4. Campo `gcp_project_id` del entorno activo
+5. Sin establecer
+
+## Secreto Consolidado
+
+Para reducir costos y llamadas, una aplicación puede guardar sus valores en un
+único secreto GCP cuyo payload es un objeto JSON. `consolidated_secret` indica
+su nombre. `fallback_to_individual` vale `true` por defecto: una clave ausente
+del JSON se busca como secreto individual. Con `false`, el payload consolidado
+es autoritativo, no se hacen accesos individuales y las claves ausentes siguen
+las reglas existentes de required/default/optional. Esta opción requiere
+`consolidated_secret`; si el secreto falta o el payload no es un objeto JSON, la
+carga falla inmediatamente.
+
+Cada carga por lote registra un único resumen agregado: claves precargadas,
+resueltas desde JSON, consultadas individualmente y ausentes. Nunca incluye
+nombres ni valores. Se registra como `INFO` cuando todo proviene del consolidado
+y como `WARNING` si quedan accesos individuales o claves ausentes.
+
+## CLI de Secretos
+
+```bash
+env-manager secrets list <secreto> --project PROYECTO [--format text|json]
+echo -n "valor" | env-manager secrets set <secreto> --key CLAVE --project PROYECTO
+printf '' | env-manager secrets set <secreto> --key CLAVE --project PROYECTO --allow-empty
+```
+
+`secrets set` toma una instantánea de las versiones existentes, mezcla la clave
+en el JSON, crea y verifica una versión nueva y sólo entonces destruye las
+versiones anteriores `ENABLED` y `DISABLED`; ambos estados son facturables. Las
+versiones `DESTROYED` se ignoran. Un recurso existente sin versiones parte desde
+`{}`; un recurso que no existe sigue siendo un error. La entrada vacía se
+rechaza salvo que se use `--allow-empty`, que guarda `""`.
+
+Los escritores concurrentes sobre el mismo secreto no están soportados y deben
+serializarse externamente.
 
 ## Enmascaramiento de Secretos
 

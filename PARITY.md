@@ -6,7 +6,7 @@ PR. Un diff entre las dos copias es un fallo del gate.
 
 Referencia normativa: conocimiento.notorios.cl `4b2b7217953e` §1.
 Plan de trabajo: `.planning/PLAN-blueprint-compliance.md`.
-Estado verificado contra: env-manager 0.4.0 · env-manager-js 0.3.0 (2026-09-01).
+Estado verificado contra: env-manager 0.4.1 · env-manager-js 0.3.1 (2026-09-03).
 
 ## Regla de oro
 
@@ -41,18 +41,19 @@ crea un secreto JSON consolidado de mentira en Secret Manager, comprueba que se
 lee y que sus valores se comportan como cualquier secreto individual, y lo borra
 en el teardown pase lo que pase:
 
-- `tests/test_consolidated_secret_gsm_integration.py` (13 casos)
-- `tests/consolidated-secret-gsm-integration.test.ts` (12 casos)
+- `tests/test_consolidated_secret_gsm_integration.py` (14 casos)
+- `tests/consolidated-secret-gsm-integration.test.ts` (13 casos)
 
 Se saltan por defecto. Para correrlos:
 
 ```bash
-RUN_REAL_GCP_TESTS=1 pytest -m integration
-RUN_REAL_GCP_TESTS=1 GCP_PROJECT_ID=<proyecto> npx vitest run tests/consolidated-secret-gsm-integration.test.ts
+RUN_REAL_GCP_TESTS=1 ENV_MANAGER_ITEST_PROJECT=<proyecto> pytest -m integration
+RUN_REAL_GCP_TESTS=1 ENV_MANAGER_ITEST_PROJECT=<proyecto> npx vitest run tests/consolidated-secret-gsm-integration.test.ts
 ```
 
 Los secretos que crean llevan prefijo `env-manager-itest-`. Si alguno queda
-huérfano, se sigue facturando por versión habilitada (§1.1): bórralo.
+huérfano, sus versiones `ENABLED` y `DISABLED` siguen siendo facturables
+(§1.1): bórralo.
 
 El gate no los corre — necesitan credenciales y crean recursos.
 
@@ -64,7 +65,7 @@ Un solo binario por runtime, con el nombre de la aplicación:
 env-manager encrypt <file> [--env N] [--force] [-o OUT] [--format text|json]
 env-manager decrypt <file> [--env N] [--key HEX] [-o OUT] [--format text|json]
 env-manager secrets list <secret> --project P [--format text|json]
-env-manager secrets set  <secret> --key K --project P [--format text|json]   # valor por stdin
+env-manager secrets set  <secret> --key K --project P [--allow-empty] [--format text|json]   # valor por stdin
 env-manager --version | --help
 ```
 
@@ -103,7 +104,7 @@ abajo).
 | D5 | `NotImplementedError` | no existe | `errors.ts:6` | declarada (deriva de H6) |
 | D6 | `ConfigValidationIssue`, `DecryptionIssue` | clases | tipos TS | paridad (diferencia de lenguaje) |
 | D7 | exports auxiliares | `coerce_type`, `load_yaml`, `mask_secret`, `parse_environments`, `DotEnvLoader`, `GCPSecretLoader`, `create_loader`, `SecretLoader`, `EnvironmentConfig` | mismos, en camelCase | paridad |
-| D8 | opciones del constructor | `secret_origin`, `gcp_project_id`, `strict`, `auto_load`, `dotenv_path`, `debug`, `consolidated_secret` | mismas en camelCase, sin `autoLoad` | `autoLoad` declarada (el constructor de JS no puede esperar una promesa) |
+| D8 | opciones del constructor | `secret_origin`, `gcp_project_id`, `strict`, `auto_load`, `dotenv_path`, `debug`, `consolidated_secret`, `fallback_to_individual` | mismas en camelCase, sin `autoLoad` | `autoLoad` declarada (el constructor de JS no puede esperar una promesa) |
 
 ### Configuración YAML
 
@@ -113,6 +114,7 @@ abajo).
 | `dotenv_path`, `gcp_project_id`, `default` | sí | sí | paridad |
 | `encrypted_dotenv.enabled` + `private_key.{source,secret_origin,dotenv_path,gcp_project_id}` | sí | parsea, pero falla en runtime | ver H6 |
 | `consolidated_secret` (por entorno, por `CONSOLIDATED_SECRET` o por opción explícita) | sí | sí | paridad |
+| `fallback_to_individual` (por entorno o por opción explícita; predeterminado `true`; `false` requiere consolidado) | sí | sí | paridad |
 | `variables.<n>.{source,type,default,origin,secret_origin,dotenv_path,gcp_project_id,environment,required}` | sí | sí (normaliza snake_case → camelCase) | paridad |
 | `validation.{strict,required,optional}` | sí | sí | paridad |
 | tipos `str`, `int`, `float`, `bool` y coerción bool→str | sí | sí | paridad (verificado por el fixture) |
@@ -129,6 +131,8 @@ abajo).
 | H6 | dotenv cifrado en runtime | soportado | lanza `NotImplementedError` | declarada |
 | D11 | clave con la que se exporta a `os.environ` / `process.env` | el **nombre** de la variable (`manager.py:503`) | el **nombre** de la variable, más el `source` como alias deprecado por una versión | paridad (con alias transitorio, ver abajo) |
 | D12 | precarga del consolidado con `getMany` concurrente | N/A (síncrono) | una sola promesa compartida; antes cada clave caía a búsqueda individual | paridad |
+| D13 | consolidado autoritativo | con fallback desactivado no consulta secretos individuales y un consolidado ausente o inválido falla | igual | paridad |
+| D14 | resumen agregado de carga | conteos sin nombres ni valores; `INFO` sin accesos individuales ni ausencias, `WARNING` en caso contrario | igual | paridad |
 
 ### CLI (§1.7)
 
@@ -140,7 +144,7 @@ abajo).
 | — | `--format json` | sí | sí | paridad |
 | — | exit codes por categoría | sí | sí | paridad (verificado por el gate) |
 | — | alias deprecados con warning a stderr | sí | sí | paridad |
-| H8 | `secrets set` con destrucción de la versión anterior | sí | sí | paridad |
+| H8 | `secrets set` con destrucción de versiones anteriores facturables | sí | sí | paridad |
 | — | `secrets list` (solo nombres, nunca valores) | sí | sí | paridad |
 | — | `auth login/status/logout` | no aplica | no aplica | exención, ver abajo |
 
@@ -149,23 +153,27 @@ abajo).
 `env-manager secrets set` es la única pieza que escribe en Secret Manager. El
 orden no es negociable y está probado en los dos runtimes:
 
-1. leer el JSON de `latest`;
-2. mezclar la clave (no reemplaza el payload);
-3. si el valor ya estaba, **no** crea versión;
-4. agregar la versión nueva;
-5. leerla de vuelta y verificar que trae la clave;
-6. recién ahí destruir las demás versiones habilitadas.
+1. tomar una instantánea de las versiones existentes;
+2. leer el JSON de `latest`, o usar `{}` si el recurso existe sin versiones;
+3. mezclar la clave (no reemplaza el payload);
+4. si el valor ya estaba, **no** crea versión;
+5. agregar la versión nueva;
+6. leerla de vuelta y verificar que trae la clave;
+7. recién ahí destruir las versiones anteriores `ENABLED` y `DISABLED`.
 
 Reglas que el gate y los tests protegen:
 
 - El valor entra por **stdin**, nunca por `argv` — en `argv` queda en `ps` y en
   el historial del shell.
+- Stdin vacío es un error salvo con `--allow-empty`, que almacena `""`.
 - `secrets list` devuelve nombres de clave, nunca valores.
-- Un secreto que no existe es un error, no una creación: los secretos nacen
-  vacíos de la mano de una persona.
+- Un recurso existente sin versiones parte desde `{}`; un recurso inexistente
+  sigue siendo un error y no se crea implícitamente.
 - Un payload que no es JSON, o que no es un objeto, no se sobrescribe.
 - Si la destrucción falla, el comando sale con código 4 nombrando la versión
   que quedó facturándose. Nada de `|| true`.
+- Las escrituras concurrentes al mismo secreto no están soportadas: los
+  escritores deben serializarse externamente.
 
 ## D11: con qué clave se exporta al entorno
 

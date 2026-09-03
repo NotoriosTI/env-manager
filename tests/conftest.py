@@ -29,6 +29,7 @@ def clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "TIMEOUT",
         "GCP_PROJECT_ID",
         "SECRET_ORIGIN",
+        "CONSOLIDATED_SECRET",
         "API_KEY",
         "OPTIONAL",
         "WORKERS",

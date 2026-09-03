@@ -2,18 +2,20 @@
 
 Regla del blueprint: cada app tiene **un** secreto JSON consolidado en Google
 Secret Manager y el guardado de una actualización no puede dejar versiones
-viejas activas — se paga por versión habilitada. Este módulo es la única pieza
-que escribe en GSM, y lo hace en un orden que nunca deja la app sin secreto
-legible:
+viejas facturables: se paga por versiones ``ENABLED`` y ``DISABLED``. Este
+módulo es la única pieza que escribe en GSM, y lo hace en un orden que nunca
+deja la app sin secreto legible:
 
-1. leer el JSON de la versión ``latest``;
-2. mezclar la clave nueva;
-3. si el contenido no cambió, no se crea versión (idempotente);
-4. agregar la versión nueva;
-5. **verificar** que la versión nueva se lee y trae la clave;
-6. recién entonces destruir las demás versiones habilitadas.
+1. inventariar las versiones existentes;
+2. leer el JSON de la versión ``latest``;
+3. mezclar la clave nueva;
+4. si el contenido no cambió, no se crea versión (idempotente);
+5. agregar la versión nueva;
+6. **verificar** que la versión nueva se lee y trae la clave;
+7. recién entonces destruir las versiones facturables (``ENABLED`` y
+   ``DISABLED``) del inventario.
 
-Si el paso 6 falla, el comando lo dice con el número de versión que quedó
+Si el paso 7 falla, el comando lo dice con el número de versión que quedó
 colgando y sale con código de error. Nada de ``|| true``.
 
 El valor nunca entra por argumento: se lee de stdin. Un valor en ``argv`` queda
@@ -47,7 +49,13 @@ def _secret_path(project_id: str, secret_name: str) -> str:
     return f"projects/{project_id}/secrets/{secret_name}"
 
 
-def _read_latest(client: Any, project_id: str, secret_name: str) -> dict[str, Any]:
+def _read_latest(
+    client: Any,
+    project_id: str,
+    secret_name: str,
+    *,
+    resource_known_to_exist: bool = False,
+) -> dict[str, Any]:
     """Read the consolidated JSON from ``latest``.
 
     Un secreto que no existe es un error: crear secretos es una acción de
@@ -61,6 +69,11 @@ def _read_latest(client: Any, project_id: str, secret_name: str) -> dict[str, An
     try:
         response = client.access_secret_version(name=name)
     except gcp_exceptions.NotFound as exc:
+        if resource_known_to_exist:
+            raise SecretsError(
+                f"Secret '{secret_name}' exists in project '{project_id}', but its "
+                "latest version could not be read. Refusing to write a new version."
+            ) from exc
         raise SecretsError(
             f"Secret '{secret_name}' does not exist in project '{project_id}'. "
             "Create it empty first; env-manager does not create secrets."
@@ -91,17 +104,34 @@ def _read_latest(client: Any, project_id: str, secret_name: str) -> dict[str, An
     return data
 
 
-def _enabled_versions(client: Any, project_id: str, secret_name: str) -> list[str]:
-    """Return the names of every ENABLED version, newest first."""
+def _version_snapshot(
+    client: Any, project_id: str, secret_name: str
+) -> tuple[int, list[str]]:
+    """Return total and billable versions captured before an update."""
+
+    from google.api_core import exceptions as gcp_exceptions
 
     parent = _secret_path(project_id, secret_name)
-    names: list[str] = []
-    for version in client.list_secret_versions(parent=parent):
+    try:
+        versions = list(client.list_secret_versions(parent=parent))
+    except gcp_exceptions.NotFound as exc:
+        raise SecretsError(
+            f"Secret '{secret_name}' does not exist in project '{project_id}'. "
+            "Create the secret resource first; env-manager does not create secrets."
+        ) from exc
+    except gcp_exceptions.PermissionDenied as exc:
+        raise SecretsError(
+            f"Permission denied listing versions for '{secret_name}' in project "
+            f"'{project_id}'. Retrying will not help; check IAM."
+        ) from exc
+
+    billable: list[str] = []
+    for version in versions:
         state = getattr(version, "state", None)
         state_name = getattr(state, "name", str(state))
-        if state_name == "ENABLED":
-            names.append(version.name)
-    return names
+        if state_name in {"ENABLED", "DISABLED"}:
+            billable.append(version.name)
+    return len(versions), billable
 
 
 def list_keys(project_id: str, secret_name: str, *, client: Any = None) -> list[str]:
@@ -119,7 +149,7 @@ def set_key(
     *,
     client: Any = None,
 ) -> dict[str, Any]:
-    """Set ``key`` in the consolidated secret, destroying the previous version.
+    """Set ``key`` and destroy all previous billable secret versions.
 
     Devuelve un resumen con la versión creada y las destruidas. Cuando el valor
     ya estaba, no crea versión y lo informa.
@@ -131,7 +161,19 @@ def set_key(
     client = client or _client()
     parent = _secret_path(project_id, secret_name)
 
-    current = _read_latest(client, project_id, secret_name)
+    version_count, previous_versions = _version_snapshot(
+        client, project_id, secret_name
+    )
+    current = (
+        _read_latest(
+            client,
+            project_id,
+            secret_name,
+            resource_known_to_exist=True,
+        )
+        if version_count
+        else {}
+    )
 
     if current.get(key) == value:
         # §1.5: no se paga una versión nueva por escribir lo mismo.
@@ -142,8 +184,6 @@ def set_key(
             "destroyed_versions": [],
             "unchanged": True,
         }
-
-    previous_versions = _enabled_versions(client, project_id, secret_name)
 
     updated = dict(current)
     updated[key] = value
@@ -191,7 +231,9 @@ def set_key(
     }
 
 
-def read_value_from_stdin(stream: Optional[Iterable[str]] = None) -> str:
+def read_value_from_stdin(
+    stream: Optional[Iterable[str]] = None, *, allow_empty: bool = False
+) -> str:
     """Read the secret value from stdin.
 
     El valor nunca viaja por ``argv``: quedaría en ``ps`` y en el historial.
@@ -201,6 +243,6 @@ def read_value_from_stdin(stream: Optional[Iterable[str]] = None) -> str:
     value = "".join(source)
     if value.endswith("\n"):
         value = value[:-1]
-    if not value:
+    if not value and not allow_empty:
         raise SecretsError("No value provided on stdin.")
     return value

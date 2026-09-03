@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from env_manager.cli import exit_codes
+from env_manager.cli import main as cli_main
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -72,6 +73,52 @@ class TestStreams:
         result = run_cli("decrypt", "/tmp/env-manager-does-not-exist.env")
         assert result.stdout == ""
         assert "Error:" in result.stderr
+
+
+class TestSecretsSet:
+    @pytest.mark.parametrize("flag, expected", [([], False), (["--allow-empty"], True)])
+    def test_allow_empty_is_forwarded_to_stdin_reader(
+        self, monkeypatch, flag, expected
+    ):
+        from env_manager.cli import secrets as secrets_module
+
+        seen = []
+
+        def fake_read_value_from_stdin(*, allow_empty=False):
+            seen.append(allow_empty)
+            return "value"
+
+        monkeypatch.setattr(
+            secrets_module, "read_value_from_stdin", fake_read_value_from_stdin
+        )
+        monkeypatch.setattr(
+            secrets_module,
+            "set_key",
+            lambda *args, **kwargs: {
+                "secret": "app-config",
+                "key": "K",
+                "created_version": None,
+                "destroyed_versions": [],
+                "unchanged": True,
+            },
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli_main.main(
+                [
+                    "secrets",
+                    "set",
+                    "app-config",
+                    "--project",
+                    "project",
+                    "--key",
+                    "K",
+                    *flag,
+                ]
+            )
+
+        assert exc_info.value.code == exit_codes.OK
+        assert seen == [expected]
 
 
 class TestDeprecatedAliases:

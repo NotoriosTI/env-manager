@@ -53,7 +53,7 @@ api_timeout = get_config("API_TIMEOUT", 30)  # with default
 ## Configuration File
 
 ```yaml
-# Optional: named environments, selected via ENVIRONMENT env var
+# Optional: named environments, selected via APP_ENV env var
 environments:
   production:
     origin: gcp
@@ -61,7 +61,7 @@ environments:
   local:
     origin: local
     dotenv_path: .env
-    default: true  # used when ENVIRONMENT is not set
+    default: true  # used when APP_ENV is not set
 
   # With encrypted .env support
   staging:
@@ -162,6 +162,7 @@ environments:
     origin: gcp
     gcp_project_id: my-project
     consolidated_secret: my-app-config
+    fallback_to_individual: false
 ```
 
 Or via environment variable (useful when the app selects gcp with
@@ -173,9 +174,27 @@ export GCP_PROJECT_ID=my-project
 export CONSOLIDATED_SECRET=my-app-config
 ```
 
+`fallback_to_individual` defaults to `true`: a key absent from the JSON payload
+is fetched from its individual GCP secret. Set it to `false` to make the
+consolidated payload authoritative; missing keys then follow the existing
+required/default/optional rules without extra Secret Manager calls. With
+fallback disabled, loading fails immediately if the consolidated secret is
+missing or its payload is not a JSON object. `fallback_to_individual: false` requires
+`consolidated_secret`.
+
+Each batch load logs one aggregate summary with the number of keys preloaded,
+served from JSON, fetched individually, and missing. It never logs key names or
+values. The summary is `INFO` when every requested key came from the consolidated
+payload, and `WARNING` when individual accesses or missing keys remain.
+
 Resolution order mirrors `GCP_PROJECT_ID`: explicit `init_config(...,
 consolidated_secret=...)` parameter → `CONSOLIDATED_SECRET` env var → `.env`
 value → active environment's `consolidated_secret` → disabled.
+
+> **Precedence warning:** `SECRET_ORIGIN`, `GCP_PROJECT_ID`, and
+> `CONSOLIDATED_SECRET` from the process environment or `.env` take precedence
+> over YAML. They can redirect the effective source without a repository change;
+> audit deployment configuration when the selected source is unexpected.
 
 ## GCP Project ID Resolution
 
@@ -195,7 +214,7 @@ env-manager encrypt <file> [--env NAME] [--force] [-o OUT] [--format text|json]
 env-manager decrypt <file> [--env NAME] [--key HEX] [-o OUT] [--format text|json]
 
 env-manager secrets list <secret> --project PROJECT [--format text|json]
-echo -n "value" | env-manager secrets set <secret> --key KEY --project PROJECT
+echo -n "value" | env-manager secrets set <secret> --key KEY --project PROJECT [--allow-empty]
 
 env-manager --version
 env-manager --help
@@ -225,12 +244,17 @@ echo -n "new-value" | \
 env-manager secrets list my-app-config --project my-gcp-project   # names only
 ```
 
-`secrets set` reads the current JSON payload, merges the key, adds a new
-version, reads it back to verify, and only then destroys the previously enabled
-versions — Secret Manager bills per enabled version. Writing the same value
-twice creates no new version. The value comes from stdin, never from `argv`,
-where it would land in `ps` and in shell history. A secret that does not exist
-is an error: create it empty by hand first.
+`secrets set` snapshots the existing versions, reads the current JSON payload,
+merges the key, adds a new version, reads it back to verify, and only then
+destroys the previous `ENABLED` and `DISABLED` versions. Both states are
+billable; `DESTROYED` versions are ignored. Writing the same value twice creates
+no new version. The value comes from stdin, never from `argv`, where it would
+land in `ps` and in shell history.
+
+Empty stdin is rejected by default. Pass `--allow-empty` to intentionally store
+`""`. An existing secret resource with no versions is initialized from `{}`;
+a secret resource that does not exist remains an error. Concurrent writers to
+the same secret are not supported and must be serialized externally.
 
 ## API Reference
 
@@ -243,6 +267,8 @@ init_config(
     "config/config_vars.yaml",
     secret_origin=None,    # "local" or "gcp" — auto-detected if None
     gcp_project_id=None,   # required when secret_origin="gcp"
+    consolidated_secret=None,
+    fallback_to_individual=None,  # YAML value, otherwise true
     strict=None,           # overrides YAML strict setting
     dotenv_path=None,      # custom .env path — auto-detected if None
     debug=False,           # log raw secret values (never use in production)
@@ -264,6 +290,8 @@ manager = ConfigManager(
     config_path="config/config_vars.yaml",
     secret_origin=None,
     gcp_project_id=None,
+    consolidated_secret=None,
+    fallback_to_individual=None,  # YAML value, otherwise true
     strict=None,
     auto_load=True,
     dotenv_path=None,
@@ -282,7 +310,12 @@ manager.values              # dict of all loaded values
 from env_manager import create_loader
 
 loader = create_loader("local", dotenv_path=".env")
-loader = create_loader("gcp", gcp_project_id="my-project")
+loader = create_loader(
+    "gcp",
+    gcp_project_id="my-project",
+    consolidated_secret="my-app-config",
+    fallback_to_individual=False,
+)
 
 values = loader.get_many(["DB_PASSWORD", "API_KEY"])
 # → {"DB_PASSWORD": "secret", "API_KEY": "key123"}

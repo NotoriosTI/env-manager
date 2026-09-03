@@ -1,6 +1,6 @@
 # New format — environments block selects loader per environment.
-# ENVIRONMENT=gcp   → GCPSecretLoader (project from gcp_project_id)
-# ENVIRONMENT=local → DotEnvLoader reading .env in the same directory
+# APP_ENV=gcp   → GCPSecretLoader (project from gcp_project_id)
+# APP_ENV=local → DotEnvLoader reading .env in the same directory
 
 environments:
   local:

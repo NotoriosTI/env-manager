@@ -127,13 +127,19 @@ def build_parser() -> argparse.ArgumentParser:
     secrets_set = secrets_sub.add_parser(
         "set",
         help=(
-            "Set one key, adding a new version and destroying the previous one. "
+            "Set one key, adding a new version and destroying all previous "
+            "billable ENABLED/DISABLED versions. "
             "The value is read from stdin, never from argv."
         ),
     )
     secrets_set.add_argument("secret", help="Consolidated secret name, e.g. <app>-config")
     secrets_set.add_argument("--key", required=True, help="Key name inside the JSON payload")
     secrets_set.add_argument("--project", required=True, help="GCP project id")
+    secrets_set.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="Allow an empty value from stdin (default: reject empty input)",
+    )
     _add_format_flag(secrets_set)
 
     return parser
@@ -212,7 +218,7 @@ def _run_secrets(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
             )
             return
 
-        value = secrets_module.read_value_from_stdin()
+        value = secrets_module.read_value_from_stdin(allow_empty=args.allow_empty)
         result = secrets_module.set_key(args.project, args.secret, args.key, value)
     except secrets_module.SecretDestroyError as exc:
         _fail(str(exc), exit_codes.REMOTE)

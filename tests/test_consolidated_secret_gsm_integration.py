@@ -8,7 +8,8 @@ sueltos en GSM.
 
 No corre por defecto. Necesita credenciales reales:
 
-    RUN_REAL_GCP_TESTS=1 pytest -m integration tests/test_consolidated_secret_gsm_integration.py
+    RUN_REAL_GCP_TESTS=1 ENV_MANAGER_ITEST_PROJECT=my-test-project \
+      pytest -m integration tests/test_consolidated_secret_gsm_integration.py
 
 Los secretos que crea llevan prefijo ``env-manager-itest-`` y se borran en el
 teardown, pasen o fallen los tests.
@@ -25,9 +26,8 @@ import pytest
 import env_manager.manager as manager_module
 from conftest import write_config
 from env_manager import ConfigManager
+from env_manager.cli.secrets import set_key
 from env_manager.loaders import GCPSecretLoader
-
-PROJECT_ID = os.getenv("ENV_MANAGER_ITEST_PROJECT", "notorios")
 
 #: Contenido del secreto consolidado. Todo inventado: ningún valor real.
 CONSOLIDATED_PAYLOAD = {
@@ -45,16 +45,28 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="module")
-def gsm_secrets():
-    """Create the throwaway secrets in GSM and remove them afterwards."""
+def gcp_project_id() -> str:
+    """Require an explicit opt-in and project before constructing a GCP client."""
 
-    if not os.getenv("RUN_REAL_GCP_TESTS"):
+    if os.getenv("RUN_REAL_GCP_TESTS") != "1":
         pytest.skip("Set RUN_REAL_GCP_TESTS=1 to run GCP integration tests.")
+    project_id = os.getenv("ENV_MANAGER_ITEST_PROJECT", "").strip()
+    if not project_id:
+        pytest.skip(
+            "Set non-empty ENV_MANAGER_ITEST_PROJECT explicitly before running "
+            "GCP integration tests."
+        )
+    return project_id
+
+
+@pytest.fixture(scope="module")
+def gsm_secrets(gcp_project_id):
+    """Create the throwaway secrets in GSM and remove them afterwards."""
 
     from google.cloud import secretmanager
 
     client = secretmanager.SecretManagerServiceClient()
-    parent = f"projects/{PROJECT_ID}"
+    parent = f"projects/{gcp_project_id}"
     suffix = uuid.uuid4().hex[:8]
 
     consolidated_name = f"env-manager-itest-{suffix}-config"
@@ -80,6 +92,7 @@ def gsm_secrets():
             "consolidated": consolidated_name,
             "individual": individual_name,
             "client": client,
+            "project_id": gcp_project_id,
         }
     finally:
         # El teardown no se salta ni aunque los tests fallen: un secreto huérfano
@@ -104,7 +117,7 @@ def config_path(tmp_path, gsm_secrets):
         environments:
           production:
             origin: gcp
-            gcp_project_id: {PROJECT_ID}
+            gcp_project_id: {gsm_secrets["project_id"]}
             consolidated_secret: {gsm_secrets["consolidated"]}
             default: true
 
@@ -163,7 +176,8 @@ class TestReadsTheConsolidatedSecret:
 
     def test_one_api_call_serves_every_consolidated_key(self, gsm_secrets):
         loader = GCPSecretLoader(
-            PROJECT_ID, consolidated_secret=gsm_secrets["consolidated"]
+            gsm_secrets["project_id"],
+            consolidated_secret=gsm_secrets["consolidated"],
         )
         real_access = loader._client.access_secret_version
         calls: list[str] = []
@@ -217,23 +231,80 @@ class TestLoaderLevelBehaviour:
         self, gsm_secrets
     ):
         loader = GCPSecretLoader(
-            PROJECT_ID, consolidated_secret=gsm_secrets["consolidated"]
+            gsm_secrets["project_id"],
+            consolidated_secret=gsm_secrets["consolidated"],
         )
         # Vive fuera del JSON, como secreto suelto: se resuelve igual.
         assert loader.get(gsm_secrets["individual"]) == "hello-from-individual"
 
     def test_a_secret_that_does_not_exist_is_none_not_an_error(self, gsm_secrets):
         loader = GCPSecretLoader(
-            PROJECT_ID, consolidated_secret=gsm_secrets["consolidated"]
+            gsm_secrets["project_id"],
+            consolidated_secret=gsm_secrets["consolidated"],
         )
         assert loader.get(f"env-manager-itest-{uuid.uuid4().hex}") is None
 
     def test_get_many_mixes_both_sources(self, gsm_secrets):
         loader = GCPSecretLoader(
-            PROJECT_ID, consolidated_secret=gsm_secrets["consolidated"]
+            gsm_secrets["project_id"],
+            consolidated_secret=gsm_secrets["consolidated"],
         )
         result = loader.get_many(["ITEST_STR", gsm_secrets["individual"]])
         assert result == {
             "ITEST_STR": "hello-from-consolidated",
             gsm_secrets["individual"]: "hello-from-individual",
         }
+
+
+def test_rotation_from_versionless_resource_destroys_disabled_versions(
+    gcp_project_id,
+):
+    """Exercise first-write and billable-version cleanup on a throwaway secret."""
+
+    from google.api_core import exceptions as gcp_exceptions
+    from google.cloud import secretmanager
+
+    client = secretmanager.SecretManagerServiceClient()
+    project_path = f"projects/{gcp_project_id}"
+    secret_id = f"env-manager-itest-rotation-{uuid.uuid4().hex[:8]}"
+    secret_path = f"{project_path}/secrets/{secret_id}"
+
+    try:
+        client.create_secret(
+            parent=project_path,
+            secret_id=secret_id,
+            secret={"replication": {"automatic": {}}},
+        )
+        first = set_key(gcp_project_id, secret_id, "A", "1", client=client)
+        assert first["created_version"] is not None
+        assert first["destroyed_versions"] == []
+
+        enabled_old = client.add_secret_version(
+            parent=secret_path,
+            payload={"data": json.dumps({"A": "1"}).encode("utf-8")},
+        )
+        client.disable_secret_version(name=first["created_version"])
+
+        rotated = set_key(gcp_project_id, secret_id, "B", "2", client=client)
+
+        assert first["created_version"] in rotated["destroyed_versions"]
+        assert enabled_old.name in rotated["destroyed_versions"]
+        prior_disabled = client.get_secret_version(name=first["created_version"])
+        assert prior_disabled.state.name == "DESTROYED"
+
+        billable = [
+            version.name
+            for version in client.list_secret_versions(parent=secret_path)
+            if version.state.name in {"ENABLED", "DISABLED"}
+        ]
+        assert billable == [rotated["created_version"]]
+    finally:
+        try:
+            client.delete_secret(name=secret_path)
+        except gcp_exceptions.NotFound:
+            pass
+        except Exception as exc:  # noqa: BLE001 - cleanup failure must be visible
+            pytest.fail(
+                f"Could not delete disposable rotation secret {secret_path}: {exc}. "
+                "Delete it manually because its versions remain billable."
+            )
