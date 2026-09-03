@@ -3,6 +3,33 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/).
 Este proyecto sigue versionado semántico.
 
+## [0.4.1] — 2026-09-03
+
+### Añadido
+
+- `secrets set --allow-empty` permite almacenar intencionalmente una cadena
+  vacía; sin el flag, stdin vacío sigue siendo un error.
+- `fallback_to_individual` en YAML y API permite hacer autoritativo el secreto
+  consolidado. Conserva `true` como valor predeterminado compatible.
+- Un resumen agregado por carga informa cuántas claves vinieron del JSON,
+  requirieron acceso individual o quedaron ausentes, sin exponer nombres ni
+  valores.
+
+### Corregido
+
+- La rotación destruye versiones anteriores `ENABLED` y `DISABLED`, ya que
+  ambas son facturables, e inicializa desde `{}` un recurso sin versiones.
+- El warning por `GCP_PROJECT_ID` sólo aparece cuando el origen global efectivo
+  es GCP.
+- Los ejemplos y el smoke test usan `APP_ENV`, que es el selector soportado.
+
+### Notas
+
+- Las escrituras concurrentes al mismo secreto no están soportadas y deben
+  serializarse externamente.
+- `SECRET_ORIGIN`, `GCP_PROJECT_ID` y `CONSOLIDATED_SECRET` definidos en el
+  entorno o `.env` prevalecen sobre el YAML.
+
 ## [0.4.0] — 2026-09-01
 
 Primera versión alineada con el blueprint §1 de la base de conocimiento
@@ -44,8 +71,9 @@ también el soporte de secreto consolidado que traía aquella.
   paquete, por paridad con el runtime JS.
 - `PARITY.md`: contrato de paridad con env-manager-js, y
   `scripts/parity-check.sh`, el gate que lo verifica.
-- Test de integración real contra Secret Manager, saltado por defecto
-  (`RUN_REAL_GCP_TESTS=1`).
+- Test de integración real contra Secret Manager, saltado por defecto y
+  limitado a un proyecto descartable explícito
+  (`RUN_REAL_GCP_TESTS=1 ENV_MANAGER_ITEST_PROJECT=<proyecto>`).
 - CI: matriz 3.12 / 3.13 con el extra `encrypted` y 3.14 sin él.
 
 ### Cambiado
